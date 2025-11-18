@@ -1,0 +1,743 @@
+/* ===== Global ===== */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    position: relative;
+    min-height: 100vh;
+    display: flex;
+    overflow-x: hidden;
+    color: #000;
+}
+
+/* ===== Background Image + Dark Overlay ===== */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: url('../images/supermarket.jpeg') no-repeat center center/cover;
+    z-index: -2;
+}
+
+body::after {
+    content: "";
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.55); /* slightly darker overlay for readability */
+    z-index: -1;
+}
+
+/* ===== POS Wrapper ===== */
+.pos-wrapper {
+    display: flex;
+    flex: 1;
+    flex-direction: row;
+    height: 100vh;
+    position: relative;
+    z-index: 0;
+}
+
+/* ===== Sidebar ===== */
+.pos-sidebar {
+    background: rgba(43, 92, 156, 0.95);
+    padding: 15px;
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    z-index: 1;
+    transition: all 0.3s ease;
+}
+
+.pos-sidebar a {
+    text-decoration: none;
+}
+
+.side-btn {
+    background: #fff;
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    text-align: left;
+    transition: 0.2s;
+    width: 100%;
+}
+.side-btn:hover { background: #e5e5e5; }
+.side-btn.danger { background: #ff4b4b; color: #fff; }
+.side-btn.hold { background: #ffbf00; }
+
+/* ===== Main Area ===== */
+.pos-main {
+    flex: 1;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    overflow-y: auto;
+    z-index: 1;
+}
+
+/* ===== Top Info ===== */
+.top-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 15px;
+    background: rgba(255,255,255,0.95);
+    padding: 15px;
+    border-radius: 8px;
+}
+
+.info-box label {
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.info-box input, .info-box select {
+    padding: 7px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    width: 100%;
+}
+
+.time-box p {
+    margin: 0;
+    font-weight: bold;
+    text-align: right;
+}
+
+/* ===== Table ===== */
+.table-area {
+    background: rgba(255,255,255,0.95);
+    padding: 10px;
+    border-radius: 8px;
+    flex: 1;
+    overflow-x: auto; /* horizontal scroll on small screens */
+}
+
+.pos-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 600px; /* keeps columns readable; scrolls on small screens */
+}
+
+.pos-table th {
+    background: #d2e3ff;
+    padding: 10px;
+    text-align: left;
+}
+
+.pos-table td {
+    padding: 10px;
+    border-bottom: 1px solid #dcdcdc;
+}
+
+/* ===== Totals ===== */
+.totals-area {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    padding: 15px;
+    background: rgba(255,255,255,0.95);
+    border-radius: 8px;
+    gap: 15px;
+}
+
+.small-totals div {
+    margin-bottom: 8px;
+}
+
+.small-totals label {
+    display: block;
+    font-weight: bold;
+}
+
+.small-totals span {
+    font-size: 18px;
+}
+
+.big-total {
+    text-align: right;
+}
+
+.big-total h1 {
+    color: #1E90FF;
+    font-size: 45px;
+    margin: 0;
+}
+
+/* ==============================
+   RESPONSIVE STYLES
+   ============================== */
+
+/* Tablets & small laptops (<= 1024px) */
+@media (max-width: 1024px) {
+    .pos-wrapper {
+        flex-direction: column;           /* sidebar on top */
+        height: auto;
+    }
+
+    .pos-sidebar {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    .side-btn {
+        text-align: center;
+        flex: 1 1 120px;                  /* buttons become smaller blocks */
+        padding: 10px;
+        font-size: 13px;
+    }
+
+    .pos-main {
+        padding: 10px;
+    }
+
+    .top-info {
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        padding: 10px;
+    }
+
+    .big-total h1 {
+        font-size: 32px;
+    }
+}
+
+/* Large phones & portrait tablets (<= 768px) */
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+
+    .pos-sidebar {
+        padding: 10px;
+    }
+
+    .top-info {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .time-box p {
+        text-align: left;
+    }
+
+    .totals-area {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .big-total {
+        width: 100%;
+        text-align: left;
+    }
+
+    .big-total h1 {
+        font-size: 30px;
+    }
+
+    .small-totals span {
+        font-size: 16px;
+    }
+}
+
+/* Small phones (<= 480px) */
+@media (max-width: 480px) {
+    .pos-sidebar {
+        flex-wrap: nowrap;
+        overflow-x: auto;                 /* allow sideways scroll for sidebar buttons */
+        gap: 6px;
+    }
+
+    .side-btn {
+        flex: 0 0 auto;
+        font-size: 12px;
+        padding: 8px 10px;
+        white-space: nowrap;
+    }
+
+    .pos-main {
+        padding: 8px;
+    }
+
+    .table-area {
+        padding: 6px;
+    }
+
+    .pos-table th,
+    .pos-table td {
+        padding: 6px;
+        font-size: 12px;
+    }
+
+    .top-info {
+        padding: 8px;
+    }
+
+    .big-total h1 {
+        font-size: 24px;
+    }
+}
+
+
+/* ===== Buttons ===== */
+#add-customer-btn {
+    background-color: #1E90FF;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    font-size: 1rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+#add-customer-btn:hover { background-color: #0d6efd; transform: translateY(-1px); }
+#add-customer-btn:active { background-color: #0b5ed7; transform: translateY(1px); }
+
+/* ===== Modals ===== */
+/* ===========================
+   GLOBAL MODAL OVERLAY
+=========================== */
+.modal {
+    position: fixed;
+    inset: 0;
+    display: none;                  /* shown via JS */
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.55); /* dark glass */
+    z-index: 9999;
+    padding: 1.5rem;
+}
+
+/* ===========================
+   MODAL CARD
+=========================== */
+.modal-content {
+    background: #ffffff;
+    border-radius: 12px;
+    max-width: 520px;
+    width: 100%;
+    max-height: 90vh;
+    padding: 1.5rem 1.75rem 1.25rem;
+    box-shadow:
+        0 24px 60px rgba(15, 23, 42, 0.35),
+        0 0 0 1px rgba(148, 163, 184, 0.2);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow: hidden;
+}
+
+/* Scrollable inner body for long content (tables, lists) */
+.modal-content > h3 + * {
+    overflow-y: auto;
+    max-height: calc(90vh - 5rem);
+}
+
+/* ===========================
+   MODAL HEADER / CLOSE ICON
+=========================== */
+.modal-content h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #0f172a;
+    margin: 0 0 0.25rem;
+}
+
+.modal .close {
+    position: absolute;
+    top: 0.7rem;
+    right: 0.9rem;
+    font-size: 1.3rem;
+    cursor: pointer;
+    line-height: 1;
+    color: #94a3b8;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.modal .close:hover {
+    color: #0f172a;
+    transform: scale(1.1);
+}
+
+/* ===========================
+   FORMS INSIDE MODALS
+=========================== */
+.modal-content form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.modal-content label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #64748b;
+    display: block;
+    margin-bottom: 0.2rem;
+}
+
+
+.modal-content input[type="text"],
+.modal-content input[type="email"],
+.modal-content input[type="number"],
+.modal-content select {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    background: #f8fafc;
+}
+
+.modal-content input:focus,
+.modal-content select:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+    background: #ffffff;
+}
+
+/* Primary action button inside modals */
+.modal-content button,
+.modal-content .primary-btn {
+    border: none;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    padding: 0.55rem 1.2rem;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    margin-top: 0.5rem;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.modal-content button:hover {
+    filter: brightness(1.05);
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.35);
+    transform: translateY(-1px);
+}
+
+.modal-content button:active {
+    transform: translateY(0);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+}
+
+/* Secondary / subtle buttons (like in tables) */
+.btn-ghost {
+    border-radius: 999px;
+    border: 1px solid #e2e8f0;
+    background: #ffffff;
+    color: #0f172a;
+    padding: 0.4rem 0.9rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease, border 0.12s ease;
+}
+
+.btn-ghost:hover {
+    background: #f1f5f9;
+}
+
+/* Danger button (delete) */
+.btn-danger,
+.held-delete-btn {
+    border-radius: 999px;
+    border: 1px solid #fecaca;
+    background: #fee2e2;
+    color: #b91c1c;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.12s ease, border 0.12s ease, transform 0.1s ease;
+}
+
+.btn-danger:hover,
+.held-delete-btn:hover {
+    background: #fecaca;
+    border-color: #fca5a5;
+    transform: translateY(-1px);
+}
+
+/* ===========================
+   HOLD LIST (simple list)
+=========================== */
+#hold-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+#hold-list li {
+    padding: 0.55rem 0.4rem;
+    border-bottom: 1px dashed #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.12s ease;
+}
+
+#hold-list li:hover {
+    background: #f8fafc;
+}
+
+/* ===========================
+   CALCULATOR MODAL
+=========================== */
+#calculator-modal .modal-content {
+    max-width: 340px;
+}
+
+#calc-display {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    padding: 0.5rem 0.65rem;
+    margin-bottom: 0.75rem;
+    text-align: right;
+    font-size: 1rem;
+    background: #0f172a;
+    color: #e5e7eb;
+}
+
+.calc-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.4rem;
+}
+
+.calc-buttons button {
+    border: none;
+    border-radius: 10px;
+    padding: 0.6rem 0;
+    font-size: 0.95rem;
+    font-weight: 500;
+    background: #f1f5f9;
+    color: #0f172a;
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.calc-buttons button:hover {
+    background: #e2e8f0;
+    box-shadow: 0 4px 10px rgba(148, 163, 184, 0.4);
+    transform: translateY(-1px);
+}
+
+.calc-buttons button[data-value="="] {
+    background: #22c55e;
+    color: #f9fafb;
+    font-weight: 600;
+}
+
+.calc-buttons button[data-value="="]:hover {
+    background: #16a34a;
+}
+
+.calc-buttons button[data-value="C"] {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+/* ===========================
+   SALES HISTORY TABLE (MODAL)
+=========================== */
+#sales-history-modal .modal-content {
+    max-width: 750px;
+}
+
+#sales-history-modal .pos-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+#sales-history-modal .pos-table thead {
+    background: #f8fafc;
+}
+
+#sales-history-modal .pos-table th,
+#sales-history-modal .pos-table td {
+    padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+#sales-history-modal .pos-table th:last-child,
+#sales-history-modal .pos-table td:last-child {
+    text-align: center;
+}
+
+#sales-history-modal .pos-table tbody tr:hover {
+    background: #f1f5f9;
+}
+
+/* ===========================
+   RESPONSIVE TWEAKS
+=========================== */
+@media (max-width: 640px) {
+    .modal {
+        padding: 0.75rem;
+    }
+
+    .modal-content {
+        max-width: 100%;
+        padding: 1.1rem 1.2rem 1rem;
+        border-radius: 10px;
+    }
+
+    #sales-history-modal .pos-table {
+        font-size: 0.8rem;
+    }
+
+    #sales-history-modal .pos-table th,
+    #sales-history-modal .pos-table td {
+        padding: 0.45rem 0.4rem;
+    }
+}
+
+
+/* ===== Search ===== */
+.search-wrapper { position: relative; width: 100%; margin-bottom: 10px; }
+
+#product-search {
+    width: 100%;
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#search-results {
+    position: absolute;
+    top: 100%; left: 0;
+    width: 100%;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-top: none;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+    list-style: none;
+    padding: 0; margin: 0;
+}
+
+#search-results li {
+    padding: 8px;
+    cursor: pointer;
+}
+
+#search-results li:hover {
+    background: #007bff;
+    color: #fff;
+}
+
+/* ===== Loading Overlay ===== */
+#loading-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+}
+
+#loading-overlay .spinner {
+    border: 6px solid rgba(255,255,255,0.3);
+    border-top: 6px solid #2563eb;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* ===== Responsive ===== */
+@media (max-width: 1200px) {
+    .pos-wrapper { flex-direction: column; }
+    .pos-sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; justify-content: center; }
+    .side-btn { flex: 1 1 45%; margin: 3px; }
+    .top-info { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+}
+
+@media (max-width: 768px) {
+    .big-total h1 { font-size: 35px; }
+    .pos-table { min-width: 100%; font-size: 14px; }
+}
+
+@media (max-width: 480px) {
+    .top-info { grid-template-columns: 1fr; }
+    .totals-area { flex-direction: column; }
+    .side-btn { flex: 1 1 100%; }
+}
+
+/* flash */
+ .flash-message {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 10px 16px;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            z-index: 10000;
+            display: none;
+        }
+        .flash-message.success { background: #28a745; }
+        .flash-message.error   { background: #dc3545; }
+
+        /* Qty buttons */
+        .qty-wrapper {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .qty-btn {
+            padding: 2px 8px;
+            border: 1px solid #ccc;
+            background: #f5f5f5;
+            cursor: pointer;
+        }
+        .qty-btn:hover {
+            background: #e0e0e0;
+        }
+        .qty-wrapper input[type="number"] {
+            width: 60px;
+            text-align: center;
+        }
+
+        /* print */
+        #receipt-modal .modal-content {
+    max-width: 320px;
+}
