@@ -47,4 +47,15 @@ class Product extends Model
     {
         return $this->hasMany(SaleItem::class);
     }
+
+    public function purchaseItems()
+{
+    return $this->hasMany(PurchaseItem::class);
+}
+
+public function purchases()
+{
+    return $this->hasManyThrough(Purchase::class, PurchaseItem::class);
+}
+
 }

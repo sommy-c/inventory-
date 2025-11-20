@@ -32,12 +32,12 @@
         
     </form>
 
-    <!-- Add Product Button (Admin Only) -->
+    <!-- Add Product Button (Admin Only)
     @if(auth()->user()->hasRole('admin'))
     <div class="button-wrapper">
         <a href="{{ route('admin.products.create') }}" class="create-btn">+ Add Product</a>
     </div>
-    @endif
+    @endif -->
 
     <!-- Products Table -->
     <div class="table-wrapper">
@@ -48,7 +48,6 @@
                     <th>Name</th>
                     <th>Category</th>
                     <th>Brand</th>
-                    <th>Supplier</th>
                     <th>Quantity</th>
                     <th>Status</th>
                     @if(auth()->user()->hasAnyRole(['admin','manager']))
@@ -69,7 +68,6 @@
                     </td>
                     <td data-label="Category">{{ $product->category ?? '-' }}</td>
                     <td data-label="Brand">{{ $product->brand ?? '-' }}</td>
-                    <td data-label="Supplier">{{ $product->supplier ?? '-' }}</td>
                     <td data-label="Quantity">{{ $product->quantity }}</td>
                     <td data-label="Status">{{ ucfirst($product->status) }}</td>
 

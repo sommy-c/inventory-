@@ -36,7 +36,7 @@
         </div>
     @endif
 </div>
-
+<!-- 
 {{-- RECENT SALES (ADMIN & MANAGER ONLY) --}}
 @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('manager'))
     <div class="card">
@@ -67,7 +67,7 @@
                 @endforelse
             </tbody>
         </table>
-    </div>
+    </div> -->
 
     {{-- SALES CHART --}}
     <div class="card">

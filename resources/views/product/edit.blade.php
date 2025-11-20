@@ -44,15 +44,21 @@
             </div>
 
             <div class="form-group">
-                <label for="category">Category</label>
-                <input list="categories" name="category" id="category"
-                       value="{{ old('category', $product->category) }}" placeholder="Type or select category">
-                <datalist id="categories">
-                    @foreach($categories as $category)
-                        <option value="{{ $category }}">
-                    @endforeach
-                </datalist>
-            </div>
+    <label for="category">Category</label>
+    <input
+        list="categoryList"
+        id="category"
+        name="category"
+        value="{{ old('category', $product->category ?? '') }}"
+        placeholder="e.g. Beverages, Snacks, Electronics"
+    >
+
+    <datalist id="categoryList">
+        @foreach($categories as $cat)
+            <option value="{{ $cat }}"></option>
+        @endforeach
+    </datalist>
+</div>
 
             <div class="form-group">
                 <label for="brand">Brand</label>
@@ -60,15 +66,22 @@
             </div>
 
             <div class="form-group">
-                <label for="supplier">Supplier</label>
-                <input list="suppliers" name="supplier" id="supplier"
-                       value="{{ old('supplier', $product->supplier) }}" placeholder="Type or select supplier">
-                <datalist id="suppliers">
-                    @foreach($suppliers as $supplier)
-                        <option value="{{ $supplier }}">
-                    @endforeach
-                </datalist>
-            </div>
+    <label for="supplier">Supplier</label>
+    <input
+        list="supplierList"
+        id="supplier"
+        name="supplier"
+        value="{{ old('supplier', $product->supplier ?? '') }}"
+        placeholder="Type or select supplier"
+    >
+
+    <datalist id="supplierList">
+        @foreach($suppliers as $supName)
+            <option value="{{ $supName }}"></option>
+        @endforeach
+    </datalist>
+</div>
+
 
             <div class="form-group">
                 <label for="purchase_price">Purchase Price <span class="required">*</span></label>
