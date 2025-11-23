@@ -2,6 +2,13 @@
 @extends('admin.layout')
 
 @section('content')
+@php
+    use App\Models\Setting;
+
+    $currencySymbol   = Setting::get('currency_symbol', '₦');
+    $currencyPosition = Setting::get('currency_position', 'left');
+@endphp
+
 <div class="container-fluid">
 
     {{-- WRAP EVERYTHING YOU WANT TO PRINT --}}
@@ -106,7 +113,7 @@
                                 Total Sales (Filtered)
                             @endif
                         </h6>
-                        <h3 class="mb-0" style="color:#fff;">{{ number_format($totalSales, 2) }}</h3>
+                        <h3 class="mb-0" style="color:#fff;">{{ $currencySymbol }}{{ number_format($totalSales, 2) }}</h3>
                     </div>
                 </div>
             </div>
@@ -166,7 +173,8 @@
 
                                 <td>{{ $sale->customer_name ?? '-' }}</td>
                                 <td>{{ $sale->items->sum('qty') }}</td>
-                                <td><strong>{{ number_format($sale->total, 2) }}</strong></td>
+                                <td><strong>{{ $currencySymbol }}{{ number_format($sale->total, 2) }}</strong></td>
+
                                 <td>{{ ucfirst($sale->payment_method) }}</td>
                                 <td>
                                     <span class="badge 
@@ -192,9 +200,10 @@
                     </tbody>
                 </table>
 
-                <div class="mt-3">
-                    {{ $sales->links() }}
-                </div>
+               <div class="pagination-wrapper mt-3">
+    {{ $sales->links() }}
+</div>
+
             </div>
         </div>
     </div> {{-- /#sales-report-print-area --}}
@@ -265,13 +274,230 @@
   </div>
 </div>
 
+
 @endsection
 <script>
     window.printCashierName = "{{ $cashier ? $cashier : 'All Cashiers' }}";
     window.printFromDate    = "{{ $fromDate ?: '—' }}";
     window.printToDate      = "{{ $toDate ?: '—' }}";
 </script>
+<style>
+    /* ========== SALES & GLOBAL PAGINATION FIX ========== */
+.pagination-wrapper {
+    margin-top: 16px;
+}
 
+/* Tailwind-style <nav> wrapper */
+.pagination-wrapper nav {
+    display: flex !important;
+    justify-content: center !important;
+}
+
+/* Tailwind's inner <div> that holds the buttons */
+.pagination-wrapper nav > div {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Hide "Showing X to Y of Z results" */
+.pagination-wrapper nav > div:first-child {
+    display: none !important;
+}
+
+/* Bootstrap-style <ul class="pagination"> */
+.pagination-wrapper .pagination {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center;
+    gap: 4px;
+    padding-left: 0;
+    margin: 0;
+}
+
+/* Base pill size (smaller, so arrows don’t look huge) */
+.pagination-wrapper nav a,
+.pagination-wrapper nav span,
+.pagination-wrapper .pagination .page-link {
+    padding: 4px 8px !important;
+    margin: 2px 2px !important;
+    font-size: 0.8rem !important;
+    line-height: 1 !important;
+    border-radius: 999px;
+    text-decoration: none !important;
+    border-width: 1px;
+    border-style: solid;
+}
+
+/* Dark theme colors */
+body.theme-dark .pagination-wrapper nav a,
+body.theme-dark .pagination-wrapper nav span,
+body.theme-dark .pagination-wrapper .page-link {
+    color: #e5e7eb;
+    border-color: rgba(148,163,184,0.65);
+    background: rgba(15,23,42,0.95);
+}
+
+/* Light theme colors (using your orange palette) */
+body.theme-light .pagination-wrapper nav a,
+body.theme-light .pagination-wrapper nav span,
+body.theme-light .pagination-wrapper .page-link {
+    color: #c05621; /* var(--orange-main) */
+    border-color: rgba(209,213,219,0.9);
+    background: rgba(255,255,255,0.95);
+}
+
+/* Active page */
+body.theme-dark .pagination-wrapper nav span[aria-current="page"],
+body.theme-dark .pagination-wrapper .page-item.active .page-link {
+    background: rgba(37,99,235,1);
+    border-color: rgba(37,99,235,1);
+    color: #ffffff;
+}
+
+body.theme-light .pagination-wrapper nav span[aria-current="page"],
+body.theme-light .pagination-wrapper .page-item.active .page-link {
+    background: #f97316;      /* orange-light */
+    border-color: #ea580c;    /* orange-light-hover */
+    color: #ffffff;
+}
+
+/* Hover */
+body.theme-dark .pagination-wrapper nav a:hover,
+body.theme-dark .pagination-wrapper .page-link:hover {
+    background: rgba(37,99,235,0.9);
+    border-color: rgba(37,99,235,1);
+    transform: translateY(-1px);
+}
+
+body.theme-light .pagination-wrapper nav a:hover,
+body.theme-light .pagination-wrapper .page-link:hover {
+    background: rgba(254,243,199,0.95);
+    border-color: #f97316;
+    transform: translateY(-1px);
+}
+
+/* Disabled */
+.pagination-wrapper nav span[aria-disabled="true"],
+.pagination-wrapper .page-item.disabled .page-link {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Shrink svg arrows (Laravel Tailwind pagination uses these) */
+.pagination-wrapper svg {
+    width: 12px !important;
+    height: 12px !important;
+}
+/* ========== STATUS BADGE STYLES (SALES TABLE) ========== */
+.glass-table .badge {
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+/* --- DARK THEME BADGES --- */
+body.theme-dark .glass-table .badge.bg-success { /* completed */
+    background: rgba(22,163,74,0.18);
+    color: #bbf7d0;
+    border-color: rgba(22,163,74,0.8);
+}
+
+body.theme-dark .glass-table .badge.bg-warning { /* paused */
+    background: rgba(250,204,21,0.18);
+    color: #facc15;
+    border-color: rgba(250,204,21,0.85);
+}
+
+body.theme-dark .glass-table .badge.bg-secondary { /* others */
+    background: rgba(148,163,184,0.18);
+    color: #e5e7eb;
+    border-color: rgba(148,163,184,0.8);
+}
+
+/* --- LIGHT THEME BADGES --- */
+body.theme-light .glass-table .badge.bg-success { /* completed */
+    background: rgba(22,163,74,0.08);
+    color: #166534;
+    border-color: rgba(22,163,74,0.75);
+}
+
+body.theme-light .glass-table .badge.bg-warning { /* paused */
+    background: rgba(250,204,21,0.10);
+    color: #854d0e;
+    border-color: rgba(250,204,21,0.8);
+}
+
+body.theme-light .glass-table .badge.bg-secondary { /* others */
+    background: rgba(148,163,184,0.10);
+    color: #4b5563;
+    border-color: rgba(148,163,184,0.75);
+}
+
+
+/* ========== PRINT BUTTONS (TOP + PER ROW) ========== */
+
+/* Base pill button look */
+.btn-print-receipt,
+#btn-print-sales-table {
+    border-radius: 999px !important;
+    padding: 4px 12px !important;
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    border-width: 1px !important;
+    border-style: solid !important;
+    background: transparent;
+    transition: background 0.15s ease, color 0.15s ease,
+                border-color 0.15s ease, transform 0.1s ease,
+                box-shadow 0.1s ease;
+}
+
+/* remove bootstrap’s default outline styles */
+.btn-print-receipt.btn-outline-primary,
+#btn-print-sales-table.btn-outline-light {
+    background: transparent !important;
+}
+
+/* --- DARK THEME PRINT BUTTONS --- */
+body.theme-dark .btn-print-receipt,
+body.theme-dark #btn-print-sales-table {
+    color: #bfdbfe;                   /* blue-200 */
+    border-color: #3b82f6;            /* blue-500 */
+}
+
+body.theme-dark .btn-print-receipt:hover,
+body.theme-dark #btn-print-sales-table:hover {
+    background: #1d4ed8;              /* blue-700 */
+    color: #ffffff;
+    border-color: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(37,99,235,0.45);
+}
+
+/* --- LIGHT THEME PRINT BUTTONS (orange accent) --- */
+body.theme-light .btn-print-receipt,
+body.theme-light #btn-print-sales-table {
+    color: #c05621;                   /* var(--orange-main) */
+    border-color: #f97316;            /* var(--orange-light) */
+}
+
+body.theme-light .btn-print-receipt:hover,
+body.theme-light #btn-print-sales-table:hover {
+    background: #f97316;              /* orange filled */
+    color: #ffffff;
+    border-color: #ea580c;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(234,88,12,0.25);
+}
+
+</style>
 
 @push('scripts')
 

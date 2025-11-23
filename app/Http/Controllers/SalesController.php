@@ -2,193 +2,294 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\DailySummaryMail;
 use App\Models\Customer;
 use App\Models\Product;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\User;
+use App\Models\Setting; // 🔹 for VAT
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
-
+use App\Mail\LowStockAlertMail;
+use Illuminate\Support\Facades\Mail;
 
 class SalesController extends Controller
 {
-   public function pos()
+    public function pos()
     {
         $customers = Customer::orderBy('name')->get();
         return view('pos', compact('customers'));
     }
 
     public function addToCart(Request $request)
-    {
-        $request->validate(['search' => 'required|string']);
+{
+    $search = $request->input('search');
 
-        $product = Product::where('barcode', $request->search)
-            ->orWhere('sku', $request->search)
-            ->orWhere('name', 'LIKE', "%{$request->search}%")
-            ->first();
+    $product = Product::query()
+        ->where(function ($q) use ($search) {
+            $q->where('sku', $search)
+              ->orWhere('barcode', $search)
+              ->orWhere('name', 'like', "%{$search}%");
+        })
+        ->first();
 
-        if (!$product) {
-            return response()->json(['error' => 'Product not found'], 404);
-        }
+    if (!$product) {
+        return response()->json(['error' => 'Product not found'], 404);
+    }
 
-        if ($product->quantity <= 0) {
-            return response()->json(['error' => 'OUT OF STOCK'], 422);
-        }
-
+    // 🔴 BLOCK suspended here
+    if ($product->is_suspended || $product->status === 'suspended') {
         return response()->json([
-            'id' => $product->id,
-            'sku' => $product->sku,
-            'name' => $product->name,
-            'price' => $product->selling_price,
-            'barcode' => $product->barcode,
-            'quantity' => $product->quantity,
-        ]);
+            'error' => 'This product is suspended and cannot be sold.'
+        ], 422);
     }
 
-    public function searchProducts(Request $request)
-    {
-        $q = $request->get('name');
-        if (!$q) return response()->json([]);
-
-        return Product::where('name', 'like', "%$q%")
-            ->orWhere('sku', 'like', "%$q%")
-            ->orWhere('barcode', 'like', "%$q%")
-            ->limit(10)
-            ->get(['id','name','sku','selling_price','quantity']);
+    if ($product->quantity <= 0) {
+        return response()->json([
+            'error' => 'Product is out of stock.'
+        ], 422);
     }
+
+    return response()->json($product);
+}
+
+
+   public function searchProducts(Request $request)
+{
+    $name = $request->query('name');
+
+    $products = Product::query()
+        ->where(function ($q) use ($name) {
+            $q->where('name', 'like', "%{$name}%")
+              ->orWhere('sku', 'like', "%{$name}%")
+              ->orWhere('barcode', 'like', "%{$name}%");
+        })
+        ->where('is_suspended', false)          // 🔴 block suspended
+        ->where('status', '!=', 'suspended')    // (extra safety)
+        ->where('quantity', '>', 0)
+        ->limit(10)
+        ->get();
+
+    return response()->json($products);
+}
+
 
     public function storeCustomer(Request $request)
     {
         $data = $request->validate([
-            'name' => 'required|string|max:255',
+            'name'    => 'required|string|max:255',
             'address' => 'nullable|string|max:500',
-            'email' => 'nullable|email|max:255',
-            'phone' => 'nullable|string|max:50',
+            'email'   => 'nullable|email|max:255',
+            'phone'   => 'nullable|string|max:50',
         ]);
 
         $customer = Customer::create($data);
 
         return response()->json([
-            'success' => true,
+            'success'  => true,
             'customer' => $customer
         ]);
     }
 
+    /**
+     * Finalize sale (POS checkout) with VAT logic.
+     */
     public function checkout(Request $request)
     {
         $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.id' => 'required|integer|exists:products,id',
-            'items.*.qty' => 'required|numeric|min:1',
-            'items.*.price' => 'required|numeric|min:0',
-            'items.*.sku' => 'required|string',
-            'items.*.name' => 'required|string',
-            'payment_method' => 'required|string',
-            'amount_paid' => 'required|numeric|min:0',
-            'customer_name' => 'nullable|string|max:255',
-            'customer_phone' => 'nullable|string|max:50',
-            'customer_email' => 'nullable|email|max:255',
+            'items'              => 'required|array|min:1',
+            'items.*.id'         => 'required|integer|exists:products,id',
+            'items.*.qty'        => 'required|numeric|min:1',
+            'items.*.price'      => 'required|numeric|min:0',
+            'items.*.sku'        => 'required|string',
+            'items.*.name'       => 'required|string',
+            'payment_method'     => 'required|string',
+            'amount_paid'        => 'required|numeric|min:0',
+            'customer_name'      => 'nullable|string|max:255',
+            'customer_phone'     => 'nullable|string|max:50',
+            'customer_email'     => 'nullable|email|max:255',
+            'discount'           => 'nullable|numeric|min:0',
+            'fee'                => 'nullable|numeric|min:0',
         ]);
 
-        // STOCK VALIDATION
-        foreach ($request->items as $item) {
+        $items = $request->items;
+
+        // VAT rate from settings (e.g. 0.075 for 7.5%)
+        $vatRate    = Setting::vatRate();      // fraction
+        $vatPercent = Setting::vatPercent();   // e.g. 7.5
+
+        $subtotal         = 0; // all items
+        $vatableSubtotal  = 0; // only VATable items
+        $productsById     = [];
+
+        // STOCK VALIDATION + subtotals
+        foreach ($items as $item) {
             $product = Product::find($item['id']);
+
+            if (!$product) {
+                return response()->json([
+                    'error' => "Product not found.",
+                ], 422);
+            }
 
             if ($item['qty'] > $product->quantity) {
                 return response()->json([
                     'error' => "{$product->name} has only {$product->quantity} left."
                 ], 422);
             }
+
+            $lineNet = $item['qty'] * $item['price']; // price assumed pre-VAT
+
+            $subtotal += $lineNet;
+
+            if ($product->is_vatable) {
+                $vatableSubtotal += $lineNet;
+            }
+
+            $productsById[$product->id] = $product;
         }
 
-        $subtotal = collect($request->items)
-            ->sum(fn($item) => $item['qty'] * $item['price']);
+        $discount  = $request->discount ?? 0;
+        $fee       = $request->fee ?? 0;
+        $vatAmount = round($vatableSubtotal * $vatRate, 2);
 
-        $discount = $request->discount ?? 0;
-        $fee = $request->fee ?? 0;
-        $total = $subtotal - $discount + $fee;
+        $total = $subtotal - $discount + $fee + $vatAmount;
         $change = $request->amount_paid - $total;
 
         $sale = Sale::create([
-            'user_id' => Auth::id(),
-            'customer_name' => $request->customer_name,
+            'user_id'        => Auth::id(),
+            'customer_name'  => $request->customer_name,
             'customer_phone' => $request->customer_phone,
             'customer_email' => $request->customer_email,
-            'subtotal' => $subtotal,
-            'discount' => $discount,
-            'fee' => $fee,
-            'total' => $total,
-            'amount_paid' => $request->amount_paid,
-            'change' => $change,
+            'subtotal'       => $subtotal,
+            'vat_amount'     => $vatAmount,
+            'vat_rate'       => $vatPercent,  // store percentage used
+            'discount'       => $discount,
+            'fee'            => $fee,
+            'total'          => $total,
+            'amount_paid'    => $request->amount_paid,
+            'change'         => $change,
             'payment_method' => $request->payment_method,
-            'status' => 'completed',
+            'status'         => 'completed',
         ]);
 
-        foreach ($request->items as $item) {
-            $product = Product::find($item['id']);
+        // Save sale items + update stock
+        foreach ($items as $item) {
+            /** @var Product $product */
+            $product = $productsById[$item['id']];
+
+            // reduce stock
             $product->quantity -= $item['qty'];
             $product->save();
 
+            $lineNet = $item['qty'] * $item['price'];
+
             SaleItem::create([
-                'sale_id' => $sale->id,
+                'sale_id'    => $sale->id,
                 'product_id' => $item['id'],
-                'sku' => $item['sku'],
-                'name' => $item['name'],
-                'qty' => $item['qty'],
-                'price' => $item['price'],
-                'subtotal' => $item['qty'] * $item['price'],
+                'sku'        => $item['sku'],
+                'name'       => $item['name'],
+                'qty'        => $item['qty'],
+                'price'      => $item['price'],      // per unit (pre-VAT)
+                'subtotal'   => $lineNet,            // line total (pre-VAT)
             ]);
         }
+        foreach ($request->items as $itemData) {
+    $product = Product::findOrFail($itemData['id']);
+
+    if ($product->is_suspended || $product->status === 'suspended') {
+        return response()->json([
+            'error' => "Product {$product->name} is suspended and cannot be sold."
+        ], 422);
+    }
+
+    // ... normal stock / sale logic here
+}
+
 
         return response()->json([
-            'success' => 'Sale completed successfully',
-            'sale_id' => $sale->id,
+            'success'      => 'Sale completed successfully',
+            'sale_id'      => $sale->id,
             'redirect_url' => route('admin.sales.print', $sale->id),
         ]);
     }
 
+    /**
+     * Pause a sale (hold) – still calculate VAT so total is accurate.
+     */
     public function pause(Request $request)
     {
         $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.id' => 'required|integer|exists:products,id',
-            'items.*.qty' => 'required|numeric|min:1',
-            'items.*.price'=> 'required|numeric|min:0',
-            'items.*.sku' => 'required|string',
-            'items.*.name' => 'required|string',
-            'hold_number' => 'required|string|max:50',
+            'items'           => 'required|array|min:1',
+            'items.*.id'      => 'required|integer|exists:products,id',
+            'items.*.qty'     => 'required|numeric|min:1',
+            'items.*.price'   => 'required|numeric|min:0',
+            'items.*.sku'     => 'required|string',
+            'items.*.name'    => 'required|string',
+            'hold_number'     => 'required|string|max:50',
+            'customer_name'   => 'nullable|string|max:255',
+            'customer_phone'  => 'nullable|string|max:50',
+            'customer_email'  => 'nullable|email|max:255',
         ]);
 
-        $subtotal = collect($request->items)
-            ->sum(fn($item) => $item['qty'] * $item['price']);
+        $items = $request->items;
+
+        $vatRate    = Setting::vatRate();
+        $vatPercent = Setting::vatPercent();
+
+        $subtotal        = 0;
+        $vatableSubtotal = 0;
+
+        foreach ($items as $item) {
+            $product = Product::find($item['id']);
+
+            if (!$product) {
+                return response()->json([
+                    'error' => 'Product not found',
+                ], 422);
+            }
+
+            $lineNet = $item['qty'] * $item['price'];
+            $subtotal += $lineNet;
+
+            if ($product->is_vatable) {
+                $vatableSubtotal += $lineNet;
+            }
+        }
+
+        $vatAmount = round($vatableSubtotal * $vatRate, 2);
+        $total     = $subtotal + $vatAmount; // no discount/fee for paused
 
         $sale = Sale::create([
-            'user_id' => Auth::id(),
-            'customer_name' => $request->customer_name,
+            'user_id'        => Auth::id(),
+            'customer_name'  => $request->customer_name,
             'customer_phone' => $request->customer_phone,
             'customer_email' => $request->customer_email,
-            'subtotal' => $subtotal,
-            'discount' => 0,
-            'fee' => 0,
-            'total' => $subtotal,
+            'subtotal'       => $subtotal,
+            'vat_amount'     => $vatAmount,
+            'vat_rate'       => $vatPercent,
+            'discount'       => 0,
+            'fee'            => 0,
+            'total'          => $total,
             'payment_method' => 'cash',
-            'status' => 'paused',
-            'hold_number' => $request->hold_number,
+            'status'         => 'paused',
+            'hold_number'    => $request->hold_number,
         ]);
 
-        foreach ($request->items as $item) {
+        foreach ($items as $item) {
             SaleItem::create([
-                'sale_id' => $sale->id,
+                'sale_id'    => $sale->id,
                 'product_id' => $item['id'],
-                'sku' => $item['sku'],
-                'name' => $item['name'],
-                'qty' => $item['qty'],
-                'price' => $item['price'],
-                'subtotal' => $item['qty'] * $item['price'],
+                'sku'        => $item['sku'],
+                'name'       => $item['name'],
+                'qty'        => $item['qty'],
+                'price'      => $item['price'],
+                'subtotal'   => $item['qty'] * $item['price'],
             ]);
         }
+        
 
         return response()->json([
             'success' => true,
@@ -223,297 +324,272 @@ class SalesController extends Controller
         return response()->json(['success' => true]);
     }
 
-    // public function print($id)
-    // {
-    //     $sale = Sale::with('items')->findOrFail($id);
-    //     return view('sales.print', compact('sale'));
-    // }
-
     // ============================================================
-// SALES REPORT (LIST + FILTERS)
-// ============================================================
-   
-// ... other uses
+    // SALES REPORT (LIST + FILTERS)
+    // ============================================================
+    public function index(Request $request)
+    {
+        $fromDate       = $request->input('from_date');
+        $toDate         = $request->input('to_date');
+        $cashierInput   = $request->input('cashier');
+        $productInput   = $request->input('product');
+        $paymentMethod  = $request->input('payment_method');
+        $customerInput  = $request->input('customer');
 
-public function index(Request $request)
-{
-    // Raw filter inputs
-    $fromDate       = $request->input('from_date');
-    $toDate         = $request->input('to_date');
-    $cashierInput   = $request->input('cashier');   // what user typed
-    $productInput   = $request->input('product');   // product name / sku
-    $paymentMethod  = $request->input('payment_method'); // exact value
-    $customerInput  = $request->input('customer');  // name or phone
+        $cashierFilter  = null;
+        $perPage        = 20;
+        $errorMessage   = null;
 
-    $cashierFilter  = null;                         // what we actually use to filter
-    $perPage        = 20;
-    $errorMessage   = null;
+        if (!empty($cashierInput)) {
+            $cashierExists = User::where('name', $cashierInput)->exists();
 
-    // -------------------------------------------------
-    // VALIDATE CASHIER NAME (if provided)
-    // -------------------------------------------------
-    if (!empty($cashierInput)) {
-        $cashierExists = User::where('name', $cashierInput)->exists();
-
-        if ($cashierExists) {
-            $cashierFilter = $cashierInput;
-        } else {
-            $errorMessage = "No cashier or manager found with the name \"{$cashierInput}\".";
+            if ($cashierExists) {
+                $cashierFilter = $cashierInput;
+            } else {
+                $errorMessage = "No cashier or manager found with the name \"{$cashierInput}\".";
+            }
         }
-    }
 
-    // -------------------------------------------------
-    // MAIN LIST QUERY (DATE + CASHIER + OTHER FILTERS)
-    //  -> exclude paused sales
-    // -------------------------------------------------
-    $query = Sale::with('items', 'user')
-        ->where('status', '!=', 'paused')
-        ->orderByDesc('created_at');
+        $query = Sale::with('items', 'user')
+            ->where('status', '!=', 'paused')
+            ->orderByDesc('created_at');
 
-    // Date filters (still date-only)
-    if (!empty($fromDate)) {
-        $query->whereDate('created_at', '>=', $fromDate);
-    }
+        if (!empty($fromDate)) {
+            $query->whereDate('created_at', '>=', $fromDate);
+        }
 
-    if (!empty($toDate)) {
-        $query->whereDate('created_at', '<=', $toDate);
-    }
+        if (!empty($toDate)) {
+            $query->whereDate('created_at', '<=', $toDate);
+        }
 
-    // Cashier / seller filter (only if we found a match)
-    if (!empty($cashierFilter)) {
-        $query->whereHas('user', function ($q) use ($cashierFilter) {
-            $q->where('name', $cashierFilter);
-        });
-    }
+        if (!empty($cashierFilter)) {
+            $query->whereHas('user', function ($q) use ($cashierFilter) {
+                $q->where('name', $cashierFilter);
+            });
+        }
 
-    // Product filter (by sale items name / sku)
-    if (!empty($productInput)) {
-        $query->whereHas('items', function ($q) use ($productInput) {
-            $q->where('name', 'like', '%' . $productInput . '%')
-              ->orWhere('sku', 'like', '%' . $productInput . '%');
-        });
-    }
+        if (!empty($productInput)) {
+            $query->whereHas('items', function ($q) use ($productInput) {
+                $q->where('name', 'like', '%' . $productInput . '%')
+                  ->orWhere('sku', 'like', '%' . $productInput . '%');
+            });
+        }
 
-    // Payment method filter (exact match)
-    if (!empty($paymentMethod)) {
-        $query->where('payment_method', $paymentMethod);
-    }
+        if (!empty($paymentMethod)) {
+            $query->where('payment_method', $paymentMethod);
+        }
 
-    // Customer filter (name or phone)
-    if (!empty($customerInput)) {
-        $query->where(function ($q) use ($customerInput) {
-            $q->where('customer_name', 'like', '%' . $customerInput . '%')
-              ->orWhere('customer_phone', 'like', '%' . $customerInput . '%');
-        });
-    }
+        if (!empty($customerInput)) {
+            $query->where(function ($q) use ($customerInput) {
+                $q->where('customer_name', 'like', '%' . $customerInput . '%')
+                  ->orWhere('customer_phone', 'like', '%' . $customerInput . '%');
+            });
+        }
 
-    // -------------------------------------------------
-    // SUMMARY FOR CURRENT FILTER (already based on $query)
-    // -------------------------------------------------
-    $summaryQuery  = clone $query;
-    $totalSales    = $summaryQuery->sum('total');
-    $totalDiscount = (clone $summaryQuery)->sum('discount');
-    $totalFee      = (clone $summaryQuery)->sum('fee');
-    $countSales    = (clone $summaryQuery)->count();
+        // SUMMARY (current filters)
+        $summaryQuery   = clone $query;
+        $totalSales     = $summaryQuery->sum('total');
+        $totalDiscount  = (clone $summaryQuery)->sum('discount');
+        $totalFee       = (clone $summaryQuery)->sum('fee');
+        $totalVat       = (clone $summaryQuery)->sum('vat_amount'); // 🔹 VAT summary
+        $countSales     = (clone $summaryQuery)->count();
 
-    // -------------------------------------------------
-    // "ACTUAL" TOTALS FOR DATE RANGE (IGNORE OTHER FILTERS)
-    //  -> exclude paused, but ignore cashier/product/payment/customer
-    // -------------------------------------------------
-    $overallQuery = Sale::query()
-        ->where('status', '!=', 'paused');
+        // OVERALL TOTALS (date range only, exclude paused)
+        $overallQuery = Sale::query()
+            ->where('status', '!=', 'paused');
 
-    if (!empty($fromDate)) {
-        $overallQuery->whereDate('created_at', '>=', $fromDate);
-    }
+        if (!empty($fromDate)) {
+            $overallQuery->whereDate('created_at', '>=', $fromDate);
+        }
 
-    if (!empty($toDate)) {
-        $overallQuery->whereDate('created_at', '<=', $toDate);
-    }
+        if (!empty($toDate)) {
+            $overallQuery->whereDate('created_at', '<=', $toDate);
+        }
 
-    $overallTotal = $overallQuery->sum('total');
-    $overallCount = (clone $overallQuery)->count();
+        $overallTotal = $overallQuery->sum('total');
+        $overallCount = (clone $overallQuery)->count();
 
-    // -------------------------------------------------
-    // CASHIER-SPECIFIC TOTAL (WITH DATE, IGNORE OTHER FILTERS)
-    // -------------------------------------------------
-    $cashierTotal = null;
-    $cashierCount = null;
+        // CASHIER-SPECIFIC TOTAL
+        $cashierTotal = null;
+        $cashierCount = null;
 
-    if (!empty($cashierFilter)) {
-        $cashierQuery = clone $overallQuery;
+        if (!empty($cashierFilter)) {
+            $cashierQuery = clone $overallQuery;
 
-        $cashierQuery->whereHas('user', function ($q) use ($cashierFilter) {
-            $q->where('name', $cashierFilter);
-        });
+            $cashierQuery->whereHas('user', function ($q) use ($cashierFilter) {
+                $q->where('name', $cashierFilter);
+            });
 
-        $cashierTotal = $cashierQuery->sum('total');
-        $cashierCount = (clone $cashierQuery)->count();
-    }
+            $cashierTotal = $cashierQuery->sum('total');
+            $cashierCount = (clone $cashierQuery)->count();
+        }
 
-    // -------------------------------------------------
-    // PAGINATED LIST (CURRENT FILTERS)
-    // -------------------------------------------------
-    $sales = $query->paginate($perPage)->appends($request->query());
+        $sales = $query->paginate($perPage)->appends($request->query());
 
-    return view('sales.index', [
-        'sales'         => $sales,
-        'fromDate'      => $fromDate,
-        'toDate'        => $toDate,
-
-        // what is REALLY used to filter by cashier
-        'cashier'       => $cashierFilter,
-
-        // what user typed (for the input value)
-        'cashierInput'  => $cashierInput,
-
-        // new filters
-        'productInput'  => $productInput,
-        'paymentMethod' => $paymentMethod,
-        'customerInput' => $customerInput,
-
-        'totalSales'    => $totalSales,
-        'totalDiscount' => $totalDiscount,
-        'totalFee'      => $totalFee,
-        'countSales'    => $countSales,
-        'overallTotal'  => $overallTotal,
-        'overallCount'  => $overallCount,
-        'cashierTotal'  => $cashierTotal,
-        'cashierCount'  => $cashierCount,
-        'errorMessage'  => $errorMessage,
-    ]);
-}
-
-
-public function exportPdf(Request $request)
-{
-    $fromDate      = $request->input('from_date');
-    $toDate        = $request->input('to_date');
-    $cashierInput  = $request->input('cashier');
-    $customerInput = $request->input('customer');
-    $productInput  = $request->input('product');
-    $paymentMethod = $request->input('payment_method');
-
-    $cashierFilter = null;
-
-    if (!empty($cashierInput)) {
-        // we assume by the time you export, cashier already exists
-        $cashierFilter = $cashierInput;
-    }
-
-    $query = Sale::with('items', 'user')
-        ->where('status', '!=', 'paused')
-        ->orderByDesc('created_at');
-
-    if (!empty($fromDate)) {
-        $query->whereDate('created_at', '>=', $fromDate);
-    }
-    if (!empty($toDate)) {
-        $query->whereDate('created_at', '<=', $toDate);
-    }
-
-    if (!empty($cashierFilter)) {
-        $query->whereHas('user', function ($q) use ($cashierFilter) {
-            $q->where('name', $cashierFilter);
-        });
-    }
-
-    if (!empty($customerInput)) {
-        $query->where(function ($q) use ($customerInput) {
-            $q->where('customer_name', 'like', '%' . $customerInput . '%')
-              ->orWhere('customer_phone', 'like', '%' . $customerInput . '%');
-        });
-    }
-
-    if (!empty($productInput)) {
-        $query->whereHas('items', function ($q) use ($productInput) {
-            $q->where('name', 'like', '%' . $productInput . '%')
-              ->orWhere('sku', 'like', '%' . $productInput . '%');
-        });
-    }
-
-    if (!empty($paymentMethod)) {
-        $query->where('payment_method', $paymentMethod);
-    }
-
-    $sales      = $query->get();
-    $totalSales = $sales->sum('total');
-    $countSales = $sales->count();
-
-    $pdf = Pdf::loadView('sales.export-pdf', [
-        'sales'         => $sales,
-        'fromDate'      => $fromDate,
-        'toDate'        => $toDate,
-        'cashier'       => $cashierFilter,
-        'customerInput' => $customerInput,
-        'productInput'  => $productInput,
-        'paymentMethod' => $paymentMethod,
-        'totalSales'    => $totalSales,
-        'countSales'    => $countSales,
-    ]);
-
-    $filename = 'sales-report-' . now()->format('Ymd_His') . '.pdf';
-
-    return $pdf->download($filename);
-}
-
-
-// ============================================================
-// PRINT (for POS redirect + AJAX from report page)
-// ============================================================
-public function print(Request $request, $id)
-{
-    $sale = Sale::with('items', 'user')->findOrFail($id);
-
-    // AJAX call from Sales Report: /admin/sales/{id}/print?raw=1
-    if ($request->has('raw')) {
-        // you can use a dedicated partial if you want: 'sales._receipt'
-        $html = view('sales.print', compact('sale'))->render();
-
-        return response()->json([
-            'html' => $html,
+        return view('sales.index', [
+            'sales'         => $sales,
+            'fromDate'      => $fromDate,
+            'toDate'        => $toDate,
+            'cashier'       => $cashierFilter,
+            'cashierInput'  => $cashierInput,
+            'productInput'  => $productInput,
+            'paymentMethod' => $paymentMethod,
+            'customerInput' => $customerInput,
+            'totalSales'    => $totalSales,
+            'totalDiscount' => $totalDiscount,
+            'totalFee'      => $totalFee,
+            'totalVat'      => $totalVat,     // 🔹 pass VAT summary
+            'countSales'    => $countSales,
+            'overallTotal'  => $overallTotal,
+            'overallCount'  => $overallCount,
+            'cashierTotal'  => $cashierTotal,
+            'cashierCount'  => $cashierCount,
+            'errorMessage'  => $errorMessage,
         ]);
     }
 
-    // Direct browser visit (POS redirect): /admin/sales/{id}/print
-    return view('sales.print', compact('sale'));
-}
+    public function exportPdf(Request $request)
+    {
+        $fromDate      = $request->input('from_date');
+        $toDate        = $request->input('to_date');
+        $cashierInput  = $request->input('cashier');
+        $customerInput = $request->input('customer');
+        $productInput  = $request->input('product');
+        $paymentMethod = $request->input('payment_method');
 
-// ============================================================
-// DETAILS (used by row click in the report to show modal)
-// ============================================================
-public function details($id)
+        $cashierFilter = null;
+
+        if (!empty($cashierInput)) {
+            $cashierFilter = $cashierInput;
+        }
+
+        $query = Sale::with('items', 'user')
+            ->where('status', '!=', 'paused')
+            ->orderByDesc('created_at');
+
+        if (!empty($fromDate)) {
+            $query->whereDate('created_at', '>=', $fromDate);
+        }
+        if (!empty($toDate)) {
+            $query->whereDate('created_at', '<=', $toDate);
+        }
+
+        if (!empty($cashierFilter)) {
+            $query->whereHas('user', function ($q) use ($cashierFilter) {
+                $q->where('name', $cashierFilter);
+            });
+        }
+
+        if (!empty($customerInput)) {
+            $query->where(function ($q) use ($customerInput) {
+                $q->where('customer_name', 'like', '%' . $customerInput . '%')
+                  ->orWhere('customer_phone', 'like', '%' . $customerInput . '%');
+            });
+        }
+
+        if (!empty($productInput)) {
+            $query->whereHas('items', function ($q) use ($productInput) {
+                $q->where('name', 'like', '%' . $productInput . '%')
+                  ->orWhere('sku', 'like', '%' . $productInput . '%');
+            });
+        }
+
+        if (!empty($paymentMethod)) {
+            $query->where('payment_method', $paymentMethod);
+        }
+
+        $sales      = $query->get();
+        $totalSales = $sales->sum('total');
+        $totalVat   = $sales->sum('vat_amount'); // 🔹 VAT in exported report
+        $countSales = $sales->count();
+
+        $pdf = Pdf::loadView('sales.export-pdf', [
+            'sales'         => $sales,
+            'fromDate'      => $fromDate,
+            'toDate'        => $toDate,
+            'cashier'       => $cashierFilter,
+            'customerInput' => $customerInput,
+            'productInput'  => $productInput,
+            'paymentMethod' => $paymentMethod,
+            'totalSales'    => $totalSales,
+            'totalVat'      => $totalVat,
+            'countSales'    => $countSales,
+        ]);
+
+        $filename = 'sales-report-' . now()->format('Ymd_His') . '.pdf';
+
+        return $pdf->download($filename);
+    }
+
+    // ============================================================
+    // PRINT (POS receipt)
+    // ============================================================
+    public function print(Request $request, $id)
+    {
+        $sale = Sale::with('items', 'user')->findOrFail($id);
+
+        if ($request->has('raw')) {
+            $html = view('sales.print', compact('sale'))->render();
+
+            return response()->json([
+                'html' => $html,
+            ]);
+        }
+
+        return view('sales.print', compact('sale'));
+    }
+
+    // ============================================================
+    // DETAILS (used by modal)
+    // ============================================================
+    public function details($id)
+    {
+        $sale = Sale::with('items', 'user')->findOrFail($id);
+
+        return response()->json([
+            'id'              => $sale->id,
+            'date_time'       => $sale->created_at->format('Y-m-d H:i'),
+            'status'          => $sale->status,
+            'cashier'         => optional($sale->user)->name,
+            'payment_method'  => $sale->payment_method,
+            'customer_name'   => $sale->customer_name,
+            'customer_phone'  => $sale->customer_phone,
+            'customer_email'  => $sale->customer_email,
+            'subtotal'        => $sale->subtotal,
+            'vat_amount'      => $sale->vat_amount,   // 🔹 include VAT
+            'vat_rate'        => $sale->vat_rate,     // 🔹 %
+            'discount'        => $sale->discount,
+            'fee'             => $sale->fee,
+            'total'           => $sale->total,
+            'amount_paid'     => $sale->amount_paid,
+            'change'          => $sale->change,
+
+            'items' => $sale->items->map(function ($item) {
+                return [
+                    'name'  => $item->name,
+                    'sku'   => $item->sku,
+                    'qty'   => $item->qty,
+                    'price' => $item->price,
+                    'total' => $item->subtotal,
+                ];
+            })->values()->toArray(),
+        ]);
+    }
+
+    public function sendDailySummary()
 {
-    $sale = Sale::with('items', 'user')->findOrFail($id);
+    $today = now()->toDateString();
 
-    return response()->json([
-        'id'              => $sale->id,
-        'date_time'       => $sale->created_at->format('Y-m-d H:i'),
-        'status'          => $sale->status,
-        'cashier'         => optional($sale->user)->name,
-        'payment_method'  => $sale->payment_method,
-        'customer_name'   => $sale->customer_name,
-        'customer_phone'  => $sale->customer_phone,
-        'customer_email'  => $sale->customer_email,
-        'subtotal'        => $sale->subtotal,
-        'discount'        => $sale->discount,
-        'fee'             => $sale->fee,
-        'total'           => $sale->total,
-        'amount_paid'     => $sale->amount_paid,
-        'change'          => $sale->change,
+    $totalSales = Sale::whereDate('created_at', $today)->sum('total');
+    $totalVat   = Sale::whereDate('created_at', $today)->sum('vat_amount');
+    $count      = Sale::whereDate('created_at', $today)->count();
 
-        'items' => $sale->items->map(function ($item) {
-            return [
-                'name'  => $item->name,
-                'sku'   => $item->sku,
-                'qty'   => $item->qty,
-                'price' => $item->price,
-                'total' => $item->subtotal,
-            ];
-        })->values()->toArray(),
-    ]);
+    $adminEmail = Setting::get('notify_admin_email');
 
+    if ($adminEmail) {
+        Mail::to($adminEmail)->send(
+            new DailySummaryMail($totalSales, $totalVat, $count, $today)
+        );
+    }
 }
-
 }
-

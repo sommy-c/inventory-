@@ -22,7 +22,9 @@ class Sale extends Model
         'change',
         'payment_method',
         'status',
-        'hold_number'
+        'hold_number',
+        'vat_amount',
+        'vat_rate'
     ];
 
       public function user()

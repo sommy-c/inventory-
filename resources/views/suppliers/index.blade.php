@@ -268,7 +268,8 @@
         <div class="modal-footer">
             <button type="button" class="btn-secondary delete-modal-cancel">Cancel</button>
 
-            <form id="deleteSupplierForm" method="POST" style="margin:0;">
+            <form id="deleteSupplierForm" method="POST" style="margin:0;"enctype="multipart/form-data"
+>
                 @csrf
                 @method('DELETE')
                 <button type="submit" class="btn-primary btn-danger-delete">
@@ -295,7 +296,7 @@
 
         <div class="modal-body">
             {{-- Email form --}}
-            <form id="emailForm" class="modal-form" action="#" method="POST">
+            <form id="emailForm" class="modal-form" action="#" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="form-group-inline">
                     <div class="form-group">

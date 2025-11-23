@@ -61,7 +61,7 @@ class UserController extends Controller
     // Get the first role assigned to the user
     $role = $user->roles->pluck('name')->first();
 
-    return redirect()->route('dashboard')
+    return redirect()->route('admin.dashboard')
                      ->with('success', 'Welcome ' . ucfirst($role) . '!');
 }
 
@@ -81,10 +81,23 @@ class UserController extends Controller
 }
 
     public function index()
-    {
-        $users = User::all();
-        return view('admin.users.index', compact('users'));
-    }
+{
+    $authUser = Auth::user();
+
+    $users = User::query()
+        ->when($authUser->hasRole('manager'), function ($q) {
+            $q->whereDoesntHave('roles', function ($qr) {
+                $qr->where('name', 'admin');
+            });
+        })
+        ->with('roles')
+        ->paginate(20);
+
+    $roles = Role::all();
+
+    return view('admin.users.index', compact('users', 'roles'));
+}
+
 
     /**
      * Show form to create a new user (Admin only)
@@ -136,29 +149,85 @@ public function edit(User $user)
  */
 public function update(Request $request, User $user)
 {
-    $request->validate([
-        'name'   => 'required|string|max:255',
-        'email'  => 'required|email|unique:users,email,' . $user->id,
-        'role'   => 'required|exists:roles,name',
-        'gender' => 'required|in:male,female,other',
+    $authUser = Auth::user();
+    $isEditingSelf = $authUser->id === $user->id;
+
+    // 🔒 Managers cannot edit admin users at all
+    if ($authUser->hasRole('manager') && $user->hasRole('admin')) {
+        abort(403, 'Managers cannot edit admin users.');
+    }
+
+    // ----- VALIDATION RULES -----
+    $rules = [
+        'name'     => 'required|string|max:255',
+        'email'    => 'required|email|unique:users,email,' . $user->id,
+        'gender'   => 'required|in:male,female,other',
         'password' => 'nullable|string|min:6|confirmed',
-    ]);
+    ];
 
-    $user->name = $request->name;
-    $user->email = $request->email;
-    $user->gender = $request->gender;
+    // Admin/Manager can see a role field, but:
+    // - admin editing self: ignore role change
+    // - manager: cannot assign admin later in logic
+    if ($authUser->hasRole('admin') || $authUser->hasRole('manager')) {
+        // We still validate, but will ignore in some cases below
+        $rules['role'] = 'required|exists:roles,name';
+    }
 
-    if($request->filled('password')){
-        $user->password = Hash::make($request->password);
+    $data = $request->validate($rules);
+
+    // ----- BASIC FIELDS -----
+    $user->name   = $data['name'];
+    $user->email  = $data['email'];
+    $user->gender = $data['gender'];
+
+    if (!empty($data['password'])) {
+        $user->password = Hash::make($data['password']);
     }
 
     $user->save();
 
-    // Sync role
-    $user->syncRoles($request->role);
+    // ----- ROLE LOGIC -----
 
-    return redirect()->route('admin.users.index')->with('success', 'User updated successfully.');
+    // 1) ADMIN
+    if ($authUser->hasRole('admin')) {
+
+        // Admin editing self: DO NOT change own role
+        if ($isEditingSelf) {
+            // do nothing to roles
+        } else {
+            // Admin editing someone else → can set any role
+            if (isset($data['role'])) {
+                $user->syncRoles($data['role']);
+            }
+        }
+
+    // 2) MANAGER
+    } elseif ($authUser->hasRole('manager')) {
+
+        // At this point we already ensured $user is NOT admin
+
+        $newRole = $data['role'] ?? null;
+
+        // Manager cannot assign admin role to anyone
+        if ($newRole === 'admin') {
+            return back()
+                ->withInput()
+                ->with('error', 'Managers cannot assign the admin role.');
+        }
+
+        if ($newRole) {
+            $user->syncRoles($newRole);
+        }
+    }
+
+    // Other roles: no role changing
+
+    return redirect()
+        ->route('admin.users.index')
+        ->with('success', 'User updated successfully.');
 }
+
+
 
 /**
  * Delete user

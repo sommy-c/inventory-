@@ -24,16 +24,20 @@
                     <td data-label="Role">{{ $user->roles->pluck('name')->join(', ') }}</td>
                     <td data-label="Actions">
                         <a href="{{ route('admin.users.edit', $user->id) }}" class="edit-btn">Edit</a>
+
                         @if(auth()->user()->hasRole('admin')) 
-                <form action="{{ route('admin.users.destroy', $user->id) }}" method="POST" style="display:inline;">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="delete-btn"
-                            onclick="return confirm('Are you sure you want to delete this user?');">
-                        Delete
-                    </button>
-                </form>
-            @endif
+                            <form action="{{ route('admin.users.destroy', $user->id) }}"
+                                  method="POST"
+                                  class="delete-form">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit"
+                                        class="delete-btn"
+                                        onclick="return confirm('Are you sure you want to delete this user?');">
+                                    Delete
+                                </button>
+                            </form>
+                        @endif
                     </td>
                 </tr>
                 @endforeach
@@ -47,132 +51,300 @@
     </div>
 </div>
 
-<!-- Vanilla CSS with Transparent Theme -->
+<!-- THEME-AWARE USERS PAGE STYLES -->
 <style>
+:root {
+    --orange-main: #c05621;
+    --orange-strong: #9a3412;
+    --orange-light: #f97316;
+    --orange-light-hover: #ea580c;
+    --border-soft: rgba(192,132,45,0.35);
+    --muted-text: #7c2d12;
+}
+
+/* ---------- CONTAINER ---------- */
 .users-container {
-    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 16px 32px;
     min-height: 100vh;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: rgba(255, 255, 255, 0.05);
-    color: #fff;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+/* Dark theme text */
+body.theme-dark .users-container {
+    color: #f9fafb;
+}
+
+/* Light theme text */
+body.theme-light .users-container {
+    color: var(--orange-main);
 }
 
 .page-title {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 600;
     margin-bottom: 20px;
 }
 
-.table-wrapper {
+/* ---------- TABLE WRAPPER ---------- */
+.users-container .table-wrapper {
     overflow-x: auto;
-    background: rgba(255, 255, 255, 0.1);
     border-radius: 12px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
 }
 
-table {
+/* dark */
+body.theme-dark .users-container .table-wrapper {
+    background: rgba(15, 23, 42, 0.9);
+    border: 1px solid rgba(31, 41, 55, 1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* light */
+body.theme-light .users-container .table-wrapper {
+    background: rgba(255,255,255,0.9);
+    border: 1px solid var(--border-soft);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.06);
+}
+
+/* ---------- TABLE ---------- */
+.users-container table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 680px;
 }
 
-thead {
-    background-color: rgba(37, 99, 235, 0.8);
-    color: #fff;
+/* header */
+.users-container thead {
+    background: linear-gradient(90deg, #1d4ed8, #2563eb);
 }
 
-thead th {
+/* light header tweak */
+body.theme-light .users-container thead {
+    background: linear-gradient(90deg, #fed7aa, #fdba74);
+}
+
+.users-container thead th {
     padding: 12px 15px;
     text-align: left;
     font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.4);
 }
 
-tbody tr {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+/* dark header text */
+body.theme-dark .users-container thead th {
+    color: #e5e7eb;
+}
+
+/* light header text */
+body.theme-light .users-container thead th {
+    color: var(--orange-strong);
+}
+
+/* rows */
+.users-container tbody tr {
     transition: background 0.2s ease;
 }
 
-tbody tr:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+/* dark stripes */
+body.theme-dark .users-container tbody tr {
+    border-bottom: 1px solid rgba(55, 65, 81, 0.85);
+}
+body.theme-dark .users-container tbody tr:nth-child(even) {
+    background: rgba(15, 23, 42, 0.92);
+}
+body.theme-dark .users-container tbody tr:nth-child(odd) {
+    background: rgba(15, 23, 42, 0.98);
+}
+body.theme-dark .users-container tbody tr:hover {
+    background: rgba(30, 64, 175, 0.35);
 }
 
-tbody td {
+/* light stripes */
+body.theme-light .users-container tbody tr {
+    border-bottom: 1px solid rgba(229,231,235,0.9);
+}
+body.theme-light .users-container tbody tr:nth-child(even) {
+    background: rgba(255,255,255,0.98);
+}
+body.theme-light .users-container tbody tr:nth-child(odd) {
+    background: rgba(255,255,255,0.93);
+}
+body.theme-light .users-container tbody tr:hover {
+    background: rgba(254,243,199,0.85);
+}
+
+/* cells */
+.users-container tbody td {
     padding: 12px 15px;
+    font-size: 0.9rem;
 }
 
-.edit-btn, .delete-btn {
-    display: inline-block;
+/* dark text */
+body.theme-dark .users-container tbody td {
+    color: #e5e7eb;
+}
+
+/* light text */
+body.theme-light .users-container tbody td {
+    color: var(--orange-main);
+}
+
+/* ---------- BUTTONS ---------- */
+.edit-btn,
+.delete-btn,
+.create-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: 6px 12px;
     margin-right: 5px;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    border-radius: 6px;
+    border-radius: 999px;
     text-decoration: none;
-    border: none;
+    border: 1px solid transparent;
     cursor: pointer;
-    transition: background 0.3s ease, transform 0.2s ease;
+    transition: background 0.2s ease, transform 0.1s ease,
+                border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.edit-btn {
-    background-color: rgba(16, 185, 129, 0.8); /* green */
-    color: #fff;
+/* Edit */
+body.theme-dark .edit-btn {
+    background: rgba(16, 185, 129, 0.18);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.8);
 }
-
-.edit-btn:hover {
-    background-color: rgba(16, 185, 129, 1);
+body.theme-dark .edit-btn:hover {
+    background: rgba(16, 185, 129, 0.35);
     transform: translateY(-1px);
 }
 
-.delete-btn {
-    background-color: rgba(239, 68, 68, 0.8); /* red */
-    color: #fff;
+body.theme-light .edit-btn {
+    background: rgba(22,163,74,0.08);
+    color: #166534;
+    border-color: rgba(22,163,74,0.7);
 }
-
-.delete-btn:hover {
-    background-color: rgba(239, 68, 68, 1);
+body.theme-light .edit-btn:hover {
+    background: rgba(22,163,74,0.22);
     transform: translateY(-1px);
 }
 
+/* Delete */
+body.theme-dark .delete-btn {
+    background: rgba(239,68,68,0.15);
+    color: #fecaca;
+    border-color: rgba(239,68,68,0.85);
+}
+body.theme-dark .delete-btn:hover {
+    background: rgba(239,68,68,0.32);
+    transform: translateY(-1px);
+}
+
+body.theme-light .delete-btn {
+    background: rgba(248,113,113,0.08);
+    color: #b91c1c;
+    border-color: rgba(239,68,68,0.85);
+}
+body.theme-light .delete-btn:hover {
+    background: rgba(248,113,113,0.22);
+    transform: translateY(-1px);
+}
+
+/* Create button */
+.create-btn {
+    margin-top: 20px;
+    padding: 10px 20px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* dark: blue */
+body.theme-dark .create-btn {
+    background: rgba(37, 99, 235, 0.9);
+    color: #fff;
+    border-color: rgba(37, 99, 235, 1);
+}
+body.theme-dark .create-btn:hover {
+    background: rgba(37, 99, 235, 1);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(37,99,235,0.45);
+}
+
+/* light: orange */
+body.theme-light .create-btn {
+    background: var(--orange-light);
+    color: #fff;
+    border-color: var(--orange-light-hover);
+    box-shadow: 0 6px 16px rgba(248,148,6,0.28);
+}
+body.theme-light .create-btn:hover {
+    background: var(--orange-light-hover);
+    transform: translateY(-2px);
+}
+
+/* wrapper for create button */
 .button-wrapper {
     margin-top: 20px;
     text-align: center;
 }
 
-.create-btn {
-    display: inline-block;
-    padding: 12px 24px;
-    background-color: rgba(37, 99, 235, 0.8);
-    color: #fff;
-    font-weight: 600;
-    border-radius: 8px;
-    text-decoration: none;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-    transition: background 0.3s ease, transform 0.2s ease;
+/* delete form inline */
+.delete-form {
+    display: inline;
 }
 
-.create-btn:hover {
-    background-color: rgba(37, 99, 235, 1);
-    transform: translateY(-2px);
-}
-
-/* Responsive tweaks */
+/* ---------- RESPONSIVE ---------- */
 @media (max-width: 768px) {
-    .page-title { font-size: 22px; }
-    table thead th, table tbody td { padding: 8px 10px; }
-    .edit-btn, .delete-btn, .create-btn { padding: 5px 10px; font-size: 0.85rem; }
+    .page-title {
+        font-size: 22px;
+    }
+    .users-container table {
+        min-width: 600px;
+    }
+    .edit-btn,
+    .delete-btn,
+    .create-btn {
+        padding: 5px 10px;
+        font-size: 0.8rem;
+    }
 }
 
 @media (max-width: 480px) {
-    table thead { display: none; }
-    table, table tbody, table tr, table td { display: block; width: 100%; }
-    table tr { margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.2); }
-    table td {
+    .users-container table thead {
+        display: none;
+    }
+    .users-container table,
+    .users-container table tbody,
+    .users-container table tr,
+    .users-container table td {
+        display: block;
+        width: 100%;
+    }
+    .users-container table tr {
+        margin-bottom: 10px;
+        border-bottom: 1px solid rgba(148,163,184,0.4);
+    }
+    .users-container table td {
         text-align: right;
         padding-left: 45%;
         position: relative;
-        color: #fff;
         font-size: 0.85rem;
     }
-    table td::before {
+
+    /* dark mobile text */
+    body.theme-dark .users-container table td {
+        color: #e5e7eb;
+    }
+
+    /* light mobile text */
+    body.theme-light .users-container table td {
+        color: var(--orange-main);
+    }
+
+    .users-container table td::before {
         content: attr(data-label);
         position: absolute;
         left: 10px;
@@ -180,11 +352,13 @@ tbody td {
         padding-left: 5px;
         font-weight: 600;
         text-align: left;
+        font-size: 0.8rem;
+        opacity: 0.85;
     }
-    .edit-btn, .delete-btn, .create-btn { padding: 4px 8px; font-size: 0.8rem; }
-    .button-wrapper { text-align: center; margin-top: 15px; }
-}
 
-.delete-form { display: inline; }
+    .button-wrapper {
+        margin-top: 15px;
+    }
+}
 </style>
 @endsection

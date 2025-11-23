@@ -16,33 +16,42 @@
         crossorigin="anonymous"
     >
 
-    {{-- Your dashboard styles --}}
+    {{-- Dashboard styles --}}
     <link rel="stylesheet" href="{{ asset('css/dashboard.css') }}">
 
     @stack('styles')
 </head>
-<body>
+
+@php
+    use App\Models\Setting;
+    $themeMode = Setting::get('theme_mode', 'dark'); // dark | light
+@endphp
+
+<body class="theme-{{ $themeMode }}">
     @include('admin.partials.sidebar')
 
     <div class="main-content">
         @include('admin.partials.topbar')
 
-        <div class="content">
-            @yield('content')
+        {{-- Center + max-width control for all pages --}}
+        <div class="page-container">
+            <div class="content">
+                @yield('content')
+            </div>
         </div>
     </div>
 
-    {{-- Chart.js (if you need it globally) --}}
+    {{-- Chart.js (global) --}}
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
-    {{-- Bootstrap JS (needed for modals, dropdowns, etc.) --}}
+    {{-- Bootstrap JS --}}
     <script
         src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
         crossorigin="anonymous"
     ></script>
 
-    {{-- Page-specific scripts from @push('scripts') --}}
+    {{-- Page-specific scripts --}}
     @stack('scripts')
 </body>
 </html>

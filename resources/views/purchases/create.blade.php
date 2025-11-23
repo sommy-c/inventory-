@@ -24,57 +24,6 @@
         <ul id="ajaxErrorList"></ul>
     </div>
 
-    <style>
-        .customers-page,
-        .customers-page h1,
-        .customers-page h2,
-        .customers-page h3,
-        .customers-page label,
-        .customers-page td,
-        .customers-page th {
-            color: #ffffff;
-        }
-
-        .customers-page input,
-        .customers-page select,
-        .customers-page textarea {
-            color: #ffffff;
-            background-color: #020617;
-            border: 1px solid #4b5563;
-        }
-
-        .customers-page input::placeholder,
-        .customers-page textarea::placeholder {
-            color: #9ca3af;
-        }
-
-        .btn-small.btn-delete {
-            background: rgba(239,68,68,0.9);
-        }
-        .btn-small.btn-delete:hover {
-            background: rgba(239,68,68,1);
-        }
-
-        #itemsSummary table {
-            width: 100%;
-            border-collapse: collapse;
-            background-color: #020617;
-        }
-        #itemsSummary th,
-        #itemsSummary td {
-            color: #f9fafb;
-            padding: 6px 10px;
-            font-size: 13px;
-            border-bottom: 1px solid rgba(148, 163, 184, 0.4);
-        }
-        #itemsSummary tbody tr:nth-child(even) {
-            background-color: rgba(15, 23, 42, 0.7);
-        }
-        #itemsSummary tbody tr:nth-child(odd) {
-            background-color: rgba(15, 23, 42, 0.4);
-        }
-    </style>
-
     <div class="card">
         <form action="{{ route('admin.purchases.store') }}" method="POST" id="purchaseForm">
             @csrf
@@ -128,89 +77,118 @@
 
             <hr>
 
-
             {{-- New Product quick-add --}}
-<div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
-    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-        <input type="checkbox" id="newProductCheckbox">
-        <span>Add new product</span>
-    </label>
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:10px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="checkbox" id="newProductCheckbox">
+                    <span>Add new product</span>
+                </label>
 
-    <span style="font-size:12px; color:#9ca3af;">
-        Check to add a new product without leaving this page.
-    </span>
-</div>
+                <span style="font-size:12px; color:#9ca3af;">
+                    Check to add a new product without leaving this page.
+                </span>
+            </div>
 
-{{-- AJAX success for new product --}}
-<div class="alert alert-success" id="newProductSuccess" style="display:none; margin-bottom:10px;">
-</div>
+            {{-- AJAX success for new product --}}
+            <div class="alert alert-success" id="newProductSuccess" style="display:none; margin-bottom:10px;">
+            </div>
 
-{{-- Items table --}}
-<div class="table-wrapper">
-    <table>
-        <thead>
-            <tr>
-                <th style="width: 30%">Product</th>
-                <th style="width: 10%">Qty</th>
-                <th style="width: 12%">Cost Price</th>
-                <th style="width: 12%">Selling Price</th>
-                <th style="width: 12%">Expiry</th>
-                <th style="width: 12%">Line Total</th>
-                <th style="width: 5%"></th>
-            </tr>
-        </thead>
+            {{-- Items table --}}
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 26%">Product</th>
+                            <th style="width: 12%">Barcode</th>
+                            <th style="width: 8%">Qty</th>
+                            <th style="width: 12%">Cost Price</th>
+                            <th style="width: 12%">Selling Price</th>
+                            <th style="width: 12%">Expiry</th>
+                            <th style="width: 12%">Line Total</th>
+                            <th style="width: 6%"></th>
+                        </tr>
+                    </thead>
 
-        <tbody id="itemsTableBody">
-            {{-- initial row --}}
-            <tr>
-                <td>
-                    {{-- Existing or New product combined --}}
-                    <input type="text"
-                           name="items[0][product]"
-                           class="product-input"
-                           list="productList"
-                           placeholder="Select or type new product">
+                    <tbody id="itemsTableBody">
+                        {{-- initial row --}}
+                        <tr>
+                            <td>
+                                {{-- Combined existing/new product input --}}
+                                <input type="text"
+                                       name="items[0][product]"
+                                       class="product-input"
+                                       list="productList"
+                                       placeholder="Select or type new product">
 
-                    <datalist id="productList">
-                        @foreach($products as $p)
-                            <option value="{{ $p->name }} ({{ $p->sku }})"
-                                    data-id="{{ $p->id }}"
-                                    data-sku="{{ $p->sku }}">
-                        @endforeach
-                    </option>
-                    </datalist>
+                                <datalist id="productList">
+                                    @foreach($products as $p)
+                                        <option value="{{ $p->name }} ({{ $p->sku }})"
+                                                data-id="{{ $p->id }}"
+                                                data-name="{{ $p->name }}"
+                                                data-sku="{{ $p->sku }}"
+                                                data-barcode="{{ $p->barcode }}"
+                                                data-purchase-price="{{ $p->purchase_price }}"
+                                                data-selling-price="{{ $p->selling_price }}"></option>
+                                    @endforeach
+                                </datalist>
 
-                    <input type="hidden" name="items[0][product_id]" class="product-id-field">
-                </td>
+                                {{-- These are what the controller actually uses --}}
+                                <input type="hidden" name="items[0][product_id]" class="product-id-field">
+                                <input type="hidden" name="items[0][name]"       class="product-name-field">
+                                <input type="hidden" name="items[0][sku]"        class="product-sku-field">
+                                <input type="hidden" name="items[0][barcode]"    class="product-barcode-hidden">
+                            </td>
 
-                <td>
-                    <input type="number" name="items[0][quantity]" class="item-qty" min="1" value="1">
-                </td>
+                            {{-- BARCODE CELL --}}
+                            <td>
+                                <input type="text"
+                                       name="items[0][barcode_input]"
+                                       class="product-barcode-input"
+                                       list="barcodeList"
+                                       placeholder="Scan / enter barcode">
+                            </td>
 
-                <td>
-                    <input type="number" name="items[0][cost_price]" class="item-cost" min="0" step="0.01" value="0">
-                </td>
+                            {{-- BARCODE DATALIST --}}
+                            <datalist id="barcodeList">
+                                @foreach($products as $p)
+                                    @if($p->barcode)
+                                        <option value="{{ $p->barcode }}"
+                                                data-id="{{ $p->id }}"
+                                                data-name="{{ $p->name }}"
+                                                data-sku="{{ $p->sku }}"
+                                                data-purchase-price="{{ $p->purchase_price }}"
+                                                data-selling-price="{{ $p->selling_price }}"></option>
+                                    @endif
+                                @endforeach
+                            </datalist>
 
-                <td>
-                    <input type="number" name="items[0][selling_price]" class="item-selling" min="0" step="0.01" value="0">
-                </td>
+                            <td>
+                                <input type="number" name="items[0][quantity]" class="item-qty" min="1" value="1">
+                            </td>
 
-                <td>
-                    <input type="date" name="items[0][expiry_date]" class="item-expiry">
-                </td>
+                            <td>
+                                <input type="number" name="items[0][cost_price]" class="item-cost" min="0" step="0.01" value="0">
+                            </td>
 
-                <td>
-                    <span class="item-line-total">0.00</span>
-                </td>
+                            <td>
+                                <input type="number" name="items[0][selling_price]" class="item-selling" min="0" step="0.01" value="0">
+                            </td>
 
-                <td>
-                    <button type="button" class="btn-small btn-delete remove-item-btn">🗑</button>
-                </td>
-            </tr>
-        </tbody>
-    </table>
+                            <td>
+                                <input type="date" name="items[0][expiry_date]" class="item-expiry">
+                            </td>
 
+                            <td>
+                                <span class="item-line-total">0.00</span>
+                            </td>
 
+                            <td>
+                                <button type="button" class="btn-small btn-delete remove-item-btn">🗑</button>
+                            </td>
+                        </tr>
+                    </tbody>
+
+                </table>
 
                 <div style="margin-top: 8px;">
                     <button type="button" class="btn-secondary" id="addItemBtn">+ Add Item</button>
@@ -232,7 +210,7 @@
     </div>
 </div>
 
-{{-- Summary modal (unchanged if you already have one) --}}
+{{-- Summary modal --}}
 <div class="modal-overlay hidden" id="purchaseSummaryModal">
     <div class="modal-card">
         <div class="modal-header">
@@ -275,7 +253,7 @@
 
                 <div class="form-group">
                     <label>Barcode</label>
-                    <input type="text" name="barcode">
+                    <input type="text" name="barcode" autofocus>
                 </div>
 
                 <div class="form-group">
@@ -303,6 +281,16 @@
                     <input type="text" name="supplier">
                 </div>
 
+                <div class="form-group">
+                    <input type="hidden" name="is_vatable" value="0">
+                    <label>
+                        <input type="checkbox" name="is_vatable" value="1"
+                            {{ old('is_vatable', true) ? 'checked' : '' }}>
+                        VATable Product
+                    </label>
+                    <small>Uncheck for VAT-exempt items (e.g. some basic foods).</small>
+                </div>
+
                 {{-- hidden defaults so stock comes from purchase, not here --}}
                 <input type="hidden" name="quantity" value="0">
                 <input type="hidden" name="reorder_level" value="10">
@@ -326,13 +314,245 @@
     </div>
 </div>
 
+<!-- Full Page Loading Overlay -->
+<div id="loading-overlay">
+    <div class="spinner"></div>
+</div>
+
+{{-- THEME-AWARE STYLES FOR NEW PURCHASE --}}
+<style>
+:root {
+    --orange-main: #c05621;
+    --orange-strong: #9a3412;
+    --orange-light: #f97316;
+    --orange-light-hover: #ea580c;
+    --border-soft: rgba(192,132,45,0.35);
+    --muted-text: #7c2d12;
+}
+
+/* ---------- TEXT & FORM COLORS ---------- */
+
+/* Dark theme text */
+body.theme-dark .customers-page,
+body.theme-dark .customers-page h1,
+body.theme-dark .customers-page h2,
+body.theme-dark .customers-page h3,
+body.theme-dark .customers-page label,
+body.theme-dark .customers-page td,
+body.theme-dark .customers-page th {
+    color: #f9fafb;
+}
+
+/* Light theme text */
+body.theme-light .customers-page,
+body.theme-light .customers-page h1,
+body.theme-light .customers-page h2,
+body.theme-light .customers-page h3,
+body.theme-light .customers-page label,
+body.theme-light .customers-page td,
+body.theme-light .customers-page th {
+    color: var(--orange-main);
+}
+
+/* Inputs, selects, textarea */
+body.theme-dark .customers-page input,
+body.theme-dark .customers-page select,
+body.theme-dark .customers-page textarea {
+    color: #ffffff;
+    background-color: #020617;
+    border: 1px solid #4b5563;
+}
+
+body.theme-light .customers-page input,
+body.theme-light .customers-page select,
+body.theme-light .customers-page textarea {
+    color: var(--orange-main);
+    background-color: rgba(255,255,255,0.98);
+    border: 1px solid rgba(209,213,219,0.9);
+}
+
+.customers-page input::placeholder,
+.customers-page textarea::placeholder {
+    color: #9ca3af;
+}
+
+/* Delete button in items table (keep strong red) */
+.btn-small.btn-delete {
+    background: rgba(239,68,68,0.9);
+    color: #fee2e2;
+}
+.btn-small.btn-delete:hover {
+    background: rgba(239,68,68,1);
+}
+
+/* ---------- ITEMS SUMMARY TABLE ---------- */
+#itemsSummary table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* dark */
+body.theme-dark #itemsSummary table {
+    background-color: #020617;
+}
+body.theme-dark #itemsSummary th,
+body.theme-dark #itemsSummary td {
+    color: #f9fafb;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+}
+body.theme-dark #itemsSummary tbody tr:nth-child(even) {
+    background-color: rgba(15, 23, 42, 0.7);
+}
+body.theme-dark #itemsSummary tbody tr:nth-child(odd) {
+    background-color: rgba(15, 23, 42, 0.4);
+}
+
+/* light */
+body.theme-light #itemsSummary table {
+    background-color: rgba(255,255,255,0.96);
+}
+body.theme-light #itemsSummary th,
+body.theme-light #itemsSummary td {
+    color: var(--orange-main);
+    border-bottom: 1px solid rgba(229,231,235,0.9);
+}
+body.theme-light #itemsSummary tbody tr:nth-child(even) {
+    background-color: rgba(255,255,255,0.98);
+}
+body.theme-light #itemsSummary tbody tr:nth-child(odd) {
+    background-color: rgba(255,247,237,0.96);
+}
+
+/* Shared cell padding */
+#itemsSummary th,
+#itemsSummary td {
+    padding: 6px 10px;
+    font-size: 13px;
+}
+
+/* ---------- ITEMS TABLE WRAPPER (keep it inside screen) ---------- */
+.table-wrapper {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    margin-top: 10px;
+}
+
+.table-wrapper table {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+}
+
+.table-wrapper th,
+.table-wrapper td {
+    padding: 6px 8px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.table-wrapper input {
+    width: 100%;
+    padding: 4px 6px;
+    font-size: 13px;
+}
+
+/* Make the trash icon button small inside table */
+.table-wrapper .btn-delete {
+    padding: 2px 6px;
+    font-size: 12px;
+}
+
+/* ---------- ALERTS (error + success) ---------- */
+.alert {
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+}
+
+/* Dark theme alerts */
+body.theme-dark .alert-success {
+    background: rgba(22, 163, 74, 0.15);
+    border: 1px solid rgba(22, 163, 74, 0.6);
+    color: #bbf7d0;
+}
+body.theme-dark .alert-error {
+    background: rgba(220, 38, 38, 0.12);
+    border: 1px solid rgba(248, 113, 113, 0.7);
+    color: #fecaca;
+}
+
+/* Light theme alerts */
+body.theme-light .alert-success {
+    background: rgba(22,163,74,0.08);
+    border: 1px solid rgba(22,163,74,0.6);
+    color: #166534;
+}
+body.theme-light .alert-error {
+    background: rgba(248,113,113,0.08);
+    border: 1px solid rgba(248,113,113,0.7);
+    color: #b91c1c;
+}
+
+/* ---------- LOADING OVERLAY (theme aware) ---------- */
+#loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px);
+}
+
+/* dark overlay */
+body.theme-dark #loading-overlay {
+    background: rgba(0,0,0,0.55);
+}
+
+/* light overlay – soft, not harsh white */
+body.theme-light #loading-overlay {
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: none;
+}
+
+#loading-overlay .spinner {
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+}
+
+/* dark spinner */
+body.theme-dark #loading-overlay .spinner {
+    border: 6px solid rgba(255,255,255,0.3);
+    border-top: 6px solid #2563eb;
+}
+
+/* light spinner */
+body.theme-light #loading-overlay .spinner {
+    border: 6px solid rgba(255,255,255,0.5);
+    border-top: 6px solid #ea580c;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+body.theme-light .pos-logo {
+    background: transparent;
+    padding: 0;
+}
+
+</style>
 @endsection
 
 
 
 
 
-@push('scripts')
+
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -353,6 +573,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const summaryModalTitle   = document.getElementById('purchaseSummaryTitle');
     const summaryCloseBtn     = document.getElementById('purchaseSummaryClose');
     const summaryCloseFooter  = document.getElementById('purchaseSummaryCloseFooter');
+
+    const productListEl  = document.getElementById('productList');
+    const barcodeListEl  = document.getElementById('barcodeList');
 
     let rowIndex = 1; // row[0] already in HTML
     let lastFocusedProductInput = null;
@@ -386,6 +609,108 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
+    // ---------- Helpers to sync existing product from name/sku or barcode ----------
+
+    function syncProductFromNameInput(input) {
+        if (!productListEl) return;
+
+        const row        = input.closest('tr');
+        if (!row) return;
+
+        const hiddenId   = row.querySelector('.product-id-field');
+        const hiddenName = row.querySelector('.product-name-field');
+        const hiddenSku  = row.querySelector('.product-sku-field');
+        const barcodeInp = row.querySelector('.product-barcode-input');
+        const costInput  = row.querySelector('.item-cost');
+        const sellInput  = row.querySelector('.item-selling');
+
+        const value = (input.value || '').trim().toLowerCase();
+        let match = null;
+
+        productListEl.querySelectorAll('option').forEach(opt => {
+            if (opt.value.trim().toLowerCase() === value) {
+                match = opt;
+            }
+        });
+
+        if (match) {
+            const id      = match.dataset.id || '';
+            const name    = match.dataset.name || '';
+            const sku     = match.dataset.sku || '';
+            const barcode = match.dataset.barcode || '';
+            const cost    = match.dataset.purchasePrice || '';
+            const sell    = match.dataset.sellingPrice || '';
+
+            if (hiddenId)   hiddenId.value   = id;
+            if (hiddenName) hiddenName.value = name;
+            if (hiddenSku)  hiddenSku.value  = sku;
+            if (barcodeInp && barcode) barcodeInp.value = barcode;
+            if (costInput && cost !== '')    costInput.value = cost;
+            if (sellInput && sell !== '')    sellInput.value = sell;
+        } else {
+            // Treat as new product: fill hidden name/sku from typed value
+            if (hiddenId)   hiddenId.value   = '';
+            if (hiddenName) hiddenName.value = input.value;
+
+            if (hiddenSku) {
+                // Try to grab sku from pattern "Name (SKU)"
+                const m = input.value.match(/\(([^)]+)\)$/);
+                hiddenSku.value = m ? m[1] : '';
+            }
+        }
+    }
+
+    function syncProductFromBarcodeInput(input) {
+        if (!barcodeListEl) return;
+
+        const row = input.closest('tr');
+        if (!row) return;
+
+        const productInput = row.querySelector('.product-input');
+        const hiddenId     = row.querySelector('.product-id-field');
+        const hiddenName   = row.querySelector('.product-name-field');
+        const hiddenSku    = row.querySelector('.product-sku-field');
+        const costInput    = row.querySelector('.item-cost');
+        const sellInput    = row.querySelector('.item-selling');
+
+        const value = (input.value || '').trim().toLowerCase();
+        let match = null;
+
+        barcodeListEl.querySelectorAll('option').forEach(opt => {
+            if (opt.value.trim().toLowerCase() === value) {
+                match = opt;
+            }
+        });
+
+        if (!match) {
+            // Unknown barcode → clear link to any existing product
+            if (hiddenId)   hiddenId.value   = '';
+            if (hiddenName) hiddenName.value = '';
+            if (hiddenSku)  hiddenSku.value  = '';
+            return;
+        }
+
+        const id   = match.dataset.id || '';
+        const name = match.dataset.name || '';
+        const sku  = match.dataset.sku || '';
+        const cost = match.dataset.purchasePrice || '';
+        const sell = match.dataset.sellingPrice || '';
+
+        if (productInput) productInput.value = name + (sku ? ' (' + sku + ')' : '');
+        if (hiddenId)     hiddenId.value     = id;
+        if (hiddenName)   hiddenName.value   = name;
+        if (hiddenSku)    hiddenSku.value    = sku;
+        if (costInput && cost !== '')        costInput.value = cost;
+        if (sellInput && sell !== '')        sellInput.value = sell;
+
+        const evt = new Event('input', { bubbles: true });
+        if (productInput) productInput.dispatchEvent(evt);
+        if (costInput)    costInput.dispatchEvent(evt);
+        if (sellInput)    sellInput.dispatchEvent(evt);
+    }
+
+    // ---------- Rows ----------
+
     // Clone the first row to create new rows
     function addItemRow() {
         const firstRow = itemsTableBody.querySelector('tr');
@@ -400,7 +725,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (el.classList.contains('product-input')) {
                 el.value = '';
+            } else if (el.classList.contains('product-barcode-input')) {
+                el.value = '';
             } else if (el.classList.contains('product-id-field')) {
+                el.value = '';
+            } else if (el.classList.contains('product-name-field')) {
+                el.value = '';
+            } else if (el.classList.contains('product-sku-field')) {
                 el.value = '';
             } else if (el.classList.contains('item-qty')) {
                 el.value = 1;
@@ -525,13 +856,24 @@ document.addEventListener('DOMContentLoaded', function () {
     // Add row button
     if (addItemBtn) addItemBtn.addEventListener('click', addItemRow);
 
-    // Live summary updates
+    // Live summary updates + product / barcode syncing
     itemsTableBody.addEventListener('input', function (e) {
+        if (e.target.classList.contains('product-input')) {
+            syncProductFromNameInput(e.target);
+            updateSummary();
+            return;
+        }
+
+        if (e.target.classList.contains('product-barcode-input')) {
+            syncProductFromBarcodeInput(e.target);
+            updateSummary();
+            return;
+        }
+
         if (
             e.target.classList.contains('item-qty') ||
             e.target.classList.contains('item-cost') ||
             e.target.classList.contains('item-selling') ||
-            e.target.classList.contains('product-input') ||
             e.target.classList.contains('item-expiry')
         ) {
             updateSummary();
@@ -554,7 +896,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // initial summary
     updateSummary();
 
-    // ---------- PURCHASE AJAX SUBMIT (unchanged except using summary) ----------
+    // ---------- PURCHASE AJAX SUBMIT ----------
     purchaseForm.addEventListener('submit', function (e) {
         e.preventDefault();
 
@@ -657,26 +999,29 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
-
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const newProductCheckbox = document.getElementById('newProductCheckbox');
-    const newProductModal    = document.getElementById('newProductModal');
-    const newProductForm     = document.getElementById('newProductForm');
-    const newProductClose    = document.getElementById('newProductClose');
-    const newProductCancel   = document.getElementById('newProductCancel');
-    const newProductSuccess  = document.getElementById('newProductSuccess');
+    const newProductCheckbox  = document.getElementById('newProductCheckbox');
+    const newProductModal     = document.getElementById('newProductModal');
+    const newProductForm      = document.getElementById('newProductForm');
+    const newProductClose     = document.getElementById('newProductClose');
+    const newProductCancel    = document.getElementById('newProductCancel');
+    const newProductSuccess   = document.getElementById('newProductSuccess');
     const newProductErrorBox  = document.getElementById('newProductErrorBox');
     const newProductErrorList = document.getElementById('newProductErrorList');
-    const productDataList    = document.getElementById('productList');
+    const productDataList     = document.getElementById('productList');
+    const barcodeListEl       = document.getElementById('barcodeList');
+    const itemsTableBody      = document.getElementById('itemsTableBody');
 
-    // We'll reuse this from main script (last focused product input)
+    // Reuse: which product input was last focused (so we know which row to fill)
     let lastFocusedProductInput = null;
-    document.getElementById('itemsTableBody').addEventListener('focusin', function(e) {
-        if (e.target.classList.contains('product-input')) {
-            lastFocusedProductInput = e.target;
-        }
-    });
+    if (itemsTableBody) {
+        itemsTableBody.addEventListener('focusin', function(e) {
+            if (e.target.classList.contains('product-input')) {
+                lastFocusedProductInput = e.target;
+            }
+        });
+    }
 
     if (!newProductCheckbox || !newProductModal || !newProductForm) {
         return;
@@ -685,6 +1030,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function openNewProductModal() {
         newProductModal.classList.remove('hidden');
     }
+
     function closeNewProductModal() {
         newProductModal.classList.add('hidden');
         newProductCheckbox.checked = false;
@@ -701,12 +1047,14 @@ document.addEventListener('DOMContentLoaded', function () {
     if (newProductClose) {
         newProductClose.addEventListener('click', closeNewProductModal);
     }
+
     if (newProductCancel) {
         newProductCancel.addEventListener('click', function (e) {
             e.preventDefault();
             closeNewProductModal();
         });
     }
+
     newProductModal.addEventListener('click', function (e) {
         if (e.target === newProductModal) {
             closeNewProductModal();
@@ -716,15 +1064,16 @@ document.addEventListener('DOMContentLoaded', function () {
     newProductForm.addEventListener('submit', function (e) {
         e.preventDefault();
 
+        // clear previous errors
         if (newProductErrorList && newProductErrorBox) {
             newProductErrorList.innerHTML = '';
             newProductErrorBox.style.display = 'none';
         }
 
-        const url = "{{ route('admin.products.store') }}";
-        const formData = new FormData(newProductForm);
-        const tokenInput = document.querySelector('input[name="_token"]');
-        const token = tokenInput ? tokenInput.value : '';
+        const url       = "{{ route('admin.products.store') }}";
+        const formData  = new FormData(newProductForm);
+        const tokenInput= document.querySelector('input[name="_token"]');
+        const token     = tokenInput ? tokenInput.value : '';
 
         fetch(url, {
             method: 'POST',
@@ -762,37 +1111,61 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const p = data.product;
 
-            // 1) Add to datalist so it's available immediately
+            // 1) Add to name/sku datalist so it's available immediately for all rows
             if (productDataList) {
                 const opt = document.createElement('option');
-                opt.value = p.name + ' (' + p.sku + ')';
-                opt.dataset.id = p.id;
+                opt.value                 = p.name + ' (' + p.sku + ')';
+                opt.dataset.id            = p.id;
+                opt.dataset.name          = p.name;
+                opt.dataset.sku           = p.sku ?? '';
+                opt.dataset.barcode       = p.barcode ?? '';
+                opt.dataset.purchasePrice = p.purchase_price;
+                opt.dataset.sellingPrice  = p.selling_price;
                 productDataList.appendChild(opt);
             }
 
-            // 2) Fill the active row's product input + hidden ID + prices
+            // 1b) Add to barcode datalist too
+            if (barcodeListEl && p.barcode) {
+                const optB = document.createElement('option');
+                optB.value                 = p.barcode;
+                optB.dataset.id            = p.id;
+                optB.dataset.name          = p.name;
+                optB.dataset.sku           = p.sku ?? '';
+                optB.dataset.purchasePrice = p.purchase_price;
+                optB.dataset.sellingPrice  = p.selling_price;
+                barcodeListEl.appendChild(optB);
+            }
+
+            // 2) Fill the active row's product input + hidden ID + prices + barcode
             let targetInput = lastFocusedProductInput;
             if (!targetInput) {
                 targetInput = document.querySelector('.product-input');
             }
+
             if (targetInput) {
-                const row = targetInput.closest('tr');
-                const hiddenId   = row.querySelector('.product-id-field');
-                const costInput  = row.querySelector('.item-cost');
-                const sellInput  = row.querySelector('.item-selling');
+                const row          = targetInput.closest('tr');
+                const hiddenId     = row.querySelector('.product-id-field');
+                const hiddenName   = row.querySelector('.product-name-field');
+                const hiddenSku    = row.querySelector('.product-sku-field');
+                const costInput    = row.querySelector('.item-cost');
+                const sellInput    = row.querySelector('.item-selling');
+                const barcodeInput = row.querySelector('.product-barcode-input');
 
                 targetInput.value = p.name + ' (' + p.sku + ')';
-                if (hiddenId) hiddenId.value = p.id;
-                if (costInput) costInput.value = p.purchase_price ?? 0;
-                if (sellInput) sellInput.value = p.selling_price ?? 0;
+                if (hiddenId)   hiddenId.value   = p.id;
+                if (hiddenName) hiddenName.value = p.name;
+                if (hiddenSku)  hiddenSku.value  = p.sku ?? '';
+                if (costInput)  costInput.value  = p.purchase_price ?? 0;
+                if (sellInput)  sellInput.value  = p.selling_price ?? 0;
+                if (barcodeInput && p.barcode) barcodeInput.value = p.barcode;
 
                 const evt = new Event('input', { bubbles: true });
-                if (costInput) costInput.dispatchEvent(evt);
-                if (sellInput) sellInput.dispatchEvent(evt);
+                if (costInput)  costInput.dispatchEvent(evt);
+                if (sellInput)  sellInput.dispatchEvent(evt);
                 targetInput.dispatchEvent(evt);
             }
 
-            // success flash
+            // 3) Success flash
             if (newProductSuccess) {
                 newProductSuccess.textContent = data.message || 'Product created successfully.';
                 newProductSuccess.style.display = 'block';
@@ -811,6 +1184,3 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endpush
-
-
-

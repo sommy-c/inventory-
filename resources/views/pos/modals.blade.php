@@ -1,20 +1,33 @@
 
 <!-- Add Customer Modal -->
+<!-- Add Customer Modal -->
 <div class="modal" id="customer-modal">
     <div class="modal-content">
         <span class="close" data-close="customer-modal">&times;</span>
         <h3>Add Customer</h3>
+
         <form id="customer-form">
+            @csrf 
+            
             <label>Name</label>
             <input type="text" name="name" required>
+
             <label>Phone</label>
             <input type="text" name="phone">
+
             <label>Email</label>
             <input type="email" name="email">
+
+            <label>Address</label>
+            <input type="text" name="address">
+
+            <div id="customer-error" style="display:none;color:#fecaca;font-size:13px;margin-top:6px;"></div>
+
             <button type="submit">Save Customer</button>
         </form>
     </div>
 </div>
+
 
 <!-- Payment Modal -->
 <div class="modal" id="payment-modal">

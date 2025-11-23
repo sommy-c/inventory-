@@ -1,3 +1,8 @@
+@php
+    $authUser     = auth()->user();
+    $isEditingSelf = $authUser->id === $user->id;
+    $editingAdmin  = $user->hasRole('admin');
+@endphp
 @extends('admin.layout')
 @section('title','Edit User')
 
@@ -53,16 +58,77 @@
                 <input type="password" name="password_confirmation">
             </div>
 
-            <div class="form-group">
-                <label>Role</label>
-                <select name="role" required>
-                    @foreach($roles as $role)
-                        <option value="{{ $role->name }}" {{ $user->roles->contains('name', $role->name) ? 'selected' : '' }}>
-                            {{ ucfirst($role->name) }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
+           {{-- ROLE FIELD --}}
+@if($authUser->hasRole('admin'))
+
+    {{-- Admin editing themselves: show role but do NOT allow change --}}
+    @if($isEditingSelf)
+        <div class="form-group">
+            <label>Role</label>
+            <input type="text"
+                   value="{{ ucfirst($user->roles->first()->name ?? 'admin') }}"
+                   disabled>
+            <small style="font-size:12px; color:#9ca3af;">
+                You cannot change your own role.
+            </small>
+        </div>
+    @else
+        {{-- Admin editing someone else: full dropdown of roles --}}
+        <div class="form-group">
+            <label>Role</label>
+            <select name="role" required>
+                @foreach($roles as $role)
+                    <option value="{{ $role->name }}"
+                        {{ $user->roles->contains('name', $role->name) ? 'selected' : '' }}>
+                        {{ ucfirst($role->name) }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+    @endif
+
+@elseif($authUser->hasRole('manager'))
+
+    {{-- Manager should never see this for admins, controller already aborts,
+         but this is an extra safety / UX guard. --}}
+    @if($editingAdmin)
+        <div class="form-group">
+            <label>Role</label>
+            <input type="text"
+                   value="Admin"
+                   disabled>
+            <small style="font-size:12px; color:#fca5a5;">
+                Managers cannot edit admin users.
+            </small>
+        </div>
+    @else
+        {{-- Manager editing non-admin: dropdown WITHOUT "admin" option --}}
+        <div class="form-group">
+            <label>Role</label>
+            <select name="role" required>
+                @foreach($roles as $role)
+                    @if($role->name === 'admin')
+                        @continue   {{-- manager shouldn't even see admin --}}
+                    @endif
+                    <option value="{{ $role->name }}"
+                        {{ $user->roles->contains('name', $role->name) ? 'selected' : '' }}>
+                        {{ ucfirst($role->name) }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
+    @endif
+
+@else
+    {{-- Other roles: role is read-only --}}
+    <div class="form-group">
+        <label>Role</label>
+        <input type="text"
+               value="{{ ucfirst($user->roles->first()->name ?? 'N/A') }}"
+               disabled>
+    </div>
+@endif
+
 
             <button type="submit" class="submit-btn">Update User</button>
         </form>

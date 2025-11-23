@@ -51,19 +51,20 @@ class CustomerController extends Controller
         ]);
     }
 
-    public function store(Request $request)
-    {
-        $data = $request->validate([
-            'name'    => 'required|string|max:255',
-            'email'   => 'nullable|email|max:255',
-            'phone'   => 'nullable|string|max:50',
-            'address' => 'nullable|string|max:500',
-        ]);
+   public function store(Request $request)
+{
+    $data = $request->validate([
+        'name'   => 'required|string|max:255',
+        'email'  => 'nullable|email|max:255|unique:customers,email',
+        'phone'  => 'nullable|string|max:50',
+        'address'=> 'nullable|string|max:500',
+    ]);
 
-        Customer::create($data);
+    Customer::create($data);
 
-        return redirect()
-            ->route('admin.customers.index')
-            ->with('success', 'Customer created successfully.');
-    }
+    return redirect()
+        ->route('admin.customers.index')
+        ->with('success', 'Customer created successfully.');
+}
+
 }
