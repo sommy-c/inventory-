@@ -97,17 +97,20 @@
             <div class="table-wrapper">
                 <table>
                     <thead>
-                        <tr>
-                            <th style="width: 26%">Product</th>
-                            <th style="width: 12%">Barcode</th>
-                            <th style="width: 8%">Qty</th>
-                            <th style="width: 12%">Cost Price</th>
-                            <th style="width: 12%">Selling Price</th>
-                            <th style="width: 12%">Expiry</th>
-                            <th style="width: 12%">Line Total</th>
-                            <th style="width: 6%"></th>
-                        </tr>
-                    </thead>
+    <tr>
+        <th style="width: 22%">Product</th>
+        <th style="width: 10%">Barcode</th>
+        <th style="width: 8%">Qty (units)</th>
+        <th style="width: 8%">Carton Qty</th>
+        <th style="width: 12%">Carton Price</th>
+        <th style="width: 12%">Cost / Unit</th>
+        <th style="width: 10%">Selling Price</th>
+        <th style="width: 10%">Expiry</th>
+        <th style="width: 8%">Line Total</th>
+        <th style="width: 6%"></th>
+    </tr>
+</thead>
+
 
                     <tbody id="itemsTableBody">
                         {{-- initial row --}}
@@ -163,12 +166,42 @@
                             </datalist>
 
                             <td>
-                                <input type="number" name="items[0][quantity]" class="item-qty" min="1" value="1">
-                            </td>
+    <input type="number"
+           name="items[0][quantity]"
+           class="item-qty"
+           min="1"
+           value="1">
+</td>
 
-                            <td>
-                                <input type="number" name="items[0][cost_price]" class="item-cost" min="0" step="0.01" value="0">
-                            </td>
+<td>
+    <input type="number"
+           name="items[0][carton_quantity]"
+           class="item-carton-qty"
+           min="0"
+           value="0"
+           placeholder="ctn qty">
+</td>
+
+<td>
+    <input type="number"
+           name="items[0][carton_price]"
+           class="item-carton-price"
+           min="0"
+           step="0.01"
+           value="0"
+           placeholder="ctn price">
+</td>
+
+<td>
+    <input type="number"
+           name="items[0][cost_price]"
+           class="item-cost"
+           min="0"
+           step="0.01"
+           value="0"
+           placeholder="auto or manual">
+</td>
+
 
                             <td>
                                 <input type="number" name="items[0][selling_price]" class="item-selling" min="0" step="0.01" value="0">
@@ -256,15 +289,15 @@
                     <input type="text" name="barcode" autofocus>
                 </div>
 
-                <div class="form-group">
+                <!-- <div class="form-group">
                     <label>Purchase Price <span style="color:#f97373">*</span></label>
-                    <input type="number" step="0.01" name="purchase_price" value="0" min="0" required>
+                    <input type="number" step="0.01" name="purchase_price" value="0" min="0" required >
                 </div>
 
                 <div class="form-group">
                     <label>Selling Price <span style="color:#f97373">*</span></label>
                     <input type="number" step="0.01" name="selling_price" value="0" min="0" required>
-                </div>
+                </div> -->
 
                 <div class="form-group">
                     <label>Category</label>
@@ -710,175 +743,252 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ---------- Rows ----------
+// Clone the first row to create new rows
+function addItemRow() {
+    const firstRow = itemsTableBody.querySelector('tr');
+    if (!firstRow) return;
 
-    // Clone the first row to create new rows
-    function addItemRow() {
-        const firstRow = itemsTableBody.querySelector('tr');
-        if (!firstRow) return;
+    const newRow = firstRow.cloneNode(true);
 
-        const newRow = firstRow.cloneNode(true);
+    newRow.querySelectorAll('input').forEach(function (el) {
+        if (el.name) {
+            el.name = el.name.replace(/\[\d+\]/, '[' + rowIndex + ']');
+        }
 
-        newRow.querySelectorAll('input').forEach(function (el) {
-            if (el.name) {
-                el.name = el.name.replace(/\[\d+\]/, '[' + rowIndex + ']');
-            }
+        if (el.classList.contains('product-input')) {
+            el.value = '';
+        } else if (el.classList.contains('product-barcode-input')) {
+            el.value = '';
+        } else if (el.classList.contains('product-id-field')) {
+            el.value = '';
+        } else if (el.classList.contains('product-name-field')) {
+            el.value = '';
+        } else if (el.classList.contains('product-sku-field')) {
+            el.value = '';
+        } else if (el.classList.contains('item-qty')) {
+            el.value = 1;
+        } else if (el.classList.contains('item-carton-qty')) {
+            el.value = 0;
+        } else if (el.classList.contains('item-carton-price')) {
+            el.value = 0;
+        } else if (el.classList.contains('item-cost')) {
+    el.value = '';
 
-            if (el.classList.contains('product-input')) {
-                el.value = '';
-            } else if (el.classList.contains('product-barcode-input')) {
-                el.value = '';
-            } else if (el.classList.contains('product-id-field')) {
-                el.value = '';
-            } else if (el.classList.contains('product-name-field')) {
-                el.value = '';
-            } else if (el.classList.contains('product-sku-field')) {
-                el.value = '';
-            } else if (el.classList.contains('item-qty')) {
-                el.value = 1;
-            } else if (el.classList.contains('item-cost') || el.classList.contains('item-selling')) {
-                el.value = 0;
-            } else if (el.classList.contains('item-expiry')) {
-                el.value = '';
-            }
-        });
 
-        const lineSpan = newRow.querySelector('.item-line-total');
-        if (lineSpan) lineSpan.textContent = '0.00';
+        } else if (el.classList.contains('item-selling')) {
+            el.value = 0;
+        } else if (el.classList.contains('item-expiry')) {
+            el.value = '';
+        }
+    });
 
-        rowIndex++;
-        itemsTableBody.appendChild(newRow);
-        updateSummary();
+    const lineSpan = newRow.querySelector('.item-line-total');
+    if (lineSpan) lineSpan.textContent = '0.00';
+
+    rowIndex++;
+    itemsTableBody.appendChild(newRow);
+    updateSummary();
+}
+
+
+
+function updateCostFromCarton(row) {
+    const cartonQtyInput   = row.querySelector('.item-carton-qty');
+    const cartonPriceInput = row.querySelector('.item-carton-price');
+    const costInput        = row.querySelector('.item-cost');
+
+    const ctnQty   = parseFloat(cartonQtyInput.value || 0);
+    const ctnPrice = parseFloat(cartonPriceInput.value || 0);
+
+    if (!ctnQty || !ctnPrice) {
+        costInput.value = '';
+        return;
     }
+
+    const perUnit = ctnPrice / ctnQty;
+    costInput.value = perUnit.toFixed(2);
+}
+
+
 
     function updateRowLineTotal(row) {
-        const qtyInput  = row.querySelector('.item-qty');
-        const costInput = row.querySelector('.item-cost');
-        const lineSpan  = row.querySelector('.item-line-total');
-        if (!qtyInput || !costInput || !lineSpan) return;
+    const qtyInput         = row.querySelector('.item-qty');           // cartons
+    const cartonPriceInput = row.querySelector('.item-carton-price');  // price per carton
+    const costInput        = row.querySelector('.item-cost');          // cost per unit
+    const lineSpan         = row.querySelector('.item-line-total');
 
-        const qty  = parseFloat(qtyInput.value || 0);
-        const cost = parseFloat(costInput.value || 0);
-        const line = qty * cost;
+    if (!qtyInput || !lineSpan) return;
 
-        lineSpan.textContent = formatMoney(line);
+    const qty         = parseFloat(qtyInput.value || 0);
+    const cartonPrice = cartonPriceInput ? parseFloat(cartonPriceInput.value || 0) : 0;
+    const unitCost    = costInput ? parseFloat(costInput.value || 0) : 0;
+
+    let line = 0;
+
+    // ✅ Prefer cartons × carton price
+    if (qty > 0 && cartonPrice > 0) {
+        line = qty * cartonPrice;
+    }
+    // Fallback: qty × unit cost
+    else if (qty > 0 && unitCost > 0) {
+        line = qty * unitCost;
     }
 
-    function updateSummary() {
-        const rows = itemsTableBody.querySelectorAll('tr');
-        const summaryData = [];
-        let subtotal = 0;
+    lineSpan.textContent = formatMoney(line);
+}
 
-        rows.forEach(function (row) {
-            const productInput = row.querySelector('.product-input');
-            const qtyInput     = row.querySelector('.item-qty');
-            const costInput    = row.querySelector('.item-cost');
-            const sellInput    = row.querySelector('.item-selling');
-            const expiryInput  = row.querySelector('.item-expiry');
 
-            if (!productInput || !qtyInput || !costInput || !sellInput || !expiryInput) {
-                return;
-            }
+   function updateSummary() {
+    const rows        = itemsTableBody.querySelectorAll('tr');
+    const summaryData = [];
+    let subtotal      = 0;
 
-            const productName = (productInput.value || '').trim();
-            const qty         = qtyInput.value;
-            const cost        = costInput.value;
-            const sell        = sellInput.value;
-            const expiry      = expiryInput.value;
+    rows.forEach(function (row) {
+        const productInput     = row.querySelector('.product-input');
+        const qtyInput         = row.querySelector('.item-qty');           // cartons
+        const costInput        = row.querySelector('.item-cost');          // unit cost
+        const cartonPriceInput = row.querySelector('.item-carton-price');  // price per carton
+        const sellInput        = row.querySelector('.item-selling');
+        const expiryInput      = row.querySelector('.item-expiry');
 
-            const hasAnyData = productName || qty || cost || sell || expiry;
-            if (!hasAnyData) return;
-
-            const qtyNum  = parseFloat(qty) || 0;
-            const costNum = parseFloat(cost) || 0;
-
-            if (productName && qty && cost) {
-                subtotal += qtyNum * costNum;
-            }
-
-            summaryData.push({
-                product: productName || '(no product name)',
-                qty: qtyNum,
-                cost: costNum,
-                sell: parseFloat(sell) || 0,
-                expiry: expiry,
-            });
-
-            updateRowLineTotal(row);
-        });
-
-        if (summaryData.length === 0) {
-            itemsSummary.innerHTML = '<em>No items yet.</em>';
+        if (!productInput || !qtyInput || !costInput || !sellInput || !expiryInput) {
             return;
         }
 
-        const discount = parseFloat(discountInput?.value || 0);
-        const tax      = parseFloat(taxInput?.value || 0);
-        const paid     = parseFloat(paidInput?.value || 0);
+        const productName = (productInput.value || '').trim();
+        const qty         = qtyInput.value;
+        const cost        = costInput.value;
+        const cartonPrice = cartonPriceInput ? cartonPriceInput.value : '';
+        const sell        = sellInput.value;
+        const expiry      = expiryInput.value;
 
-        const total   = subtotal - discount + tax;
-        const balance = total - paid;
+        const hasAnyData = productName || qty || cost || cartonPrice || sell || expiry;
+        if (!hasAnyData) return;
 
-        let html = '<table style="width:100%; margin-top:8px;">';
-        html += '<thead><tr><th>Product</th><th>Qty</th><th>Cost</th><th>Line Total</th><th>Expiry</th></tr></thead><tbody>';
+        const qtyNum         = parseFloat(qty) || 0;
+        const costNum        = parseFloat(cost) || 0;
+        const cartonPriceNum = parseFloat(cartonPrice) || 0;
 
-        summaryData.forEach(function (item) {
-            const line = item.qty * item.cost;
-            html += '<tr>' +
-                '<td>' + item.product + '</td>' +
-                '<td>' + (item.qty || '') + '</td>' +
-                '<td>' + (item.cost ? formatMoney(item.cost) : '') + '</td>' +
-                '<td>' + (line ? formatMoney(line) : '') + '</td>' +
-                '<td>' + (item.expiry || '-') + '</td>' +
-                '</tr>';
+        // ✅ Same logic as row: prefer cartons × carton price
+        let line = 0;
+        if (qtyNum > 0 && cartonPriceNum > 0) {
+            line = qtyNum * cartonPriceNum;
+        } else if (qtyNum > 0 && costNum > 0) {
+            line = qtyNum * costNum;
+        }
+
+        subtotal += line;
+
+        summaryData.push({
+            product: productName || '(no product name)',
+            qty: qtyNum,
+            cost: costNum,
+            cartonPrice: cartonPriceNum,
+            sell: parseFloat(sell) || 0,
+            expiry: expiry,
+            line: line,
         });
 
-        html += '</tbody></table>';
+        updateRowLineTotal(row);
+    });
 
-        html += '<div style="margin-top: 12px; max-width: 320px; margin-left:auto;">';
-        html += '<table style="width:100%; font-size:13px;"><tbody>';
-        html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Subtotal</td>' +
-                '<td style="padding:4px 8px; text-align:right;">' + formatMoney(subtotal) + '</td></tr>';
-        html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Discount</td>' +
-                '<td style="padding:4px 8px; text-align:right;">- ' + formatMoney(discount) + '</td></tr>';
-        html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Tax</td>' +
-                '<td style="padding:4px 8px; text-align:right;">+ ' + formatMoney(tax) + '</td></tr>';
-        html += '<tr><td style="padding:4px 8px; text-align:right; font-weight:600;">Total</td>' +
-                '<td style="padding:4px 8px; text-align:right; font-weight:600;">' + formatMoney(total) + '</td></tr>';
-        html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Amount Paid</td>' +
-                '<td style="padding:4px 8px; text-align:right;">' + formatMoney(paid) + '</td></tr>';
-        html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Balance</td>' +
-                '<td style="padding:4px 8px; text-align:right;">' + formatMoney(balance) + '</td></tr>';
-        html += '</tbody></table></div>';
-
-        itemsSummary.innerHTML = html;
+    if (summaryData.length === 0) {
+        itemsSummary.innerHTML = '<em>No items yet.</em>';
+        return;
     }
+
+    const discount = parseFloat(discountInput?.value || 0);
+    const tax      = parseFloat(taxInput?.value || 0);
+    const paid     = parseFloat(paidInput?.value || 0);
+
+    const total   = subtotal - discount + tax;
+    const balance = total - paid;
+
+    let html = '<table style="width:100%; margin-top:8px;">';
+    html += '<thead><tr>' +
+            '<th>Product</th>' +
+            '<th>Qty (ctns)</th>' +
+            '<th>Carton Price</th>' +
+            '<th>Line Total</th>' +
+            '<th>Expiry</th>' +
+            '</tr></thead><tbody>';
+
+    summaryData.forEach(function (item) {
+        html += '<tr>' +
+            '<td>' + item.product + '</td>' +
+            '<td>' + (item.qty || '') + '</td>' +
+            '<td>' + (item.cartonPrice ? formatMoney(item.cartonPrice) : '') + '</td>' +
+            '<td>' + (item.line ? formatMoney(item.line) : '') + '</td>' +
+            '<td>' + (item.expiry || '-') + '</td>' +
+            '</tr>';
+    });
+
+    html += '</tbody></table>';
+
+    html += '<div style="margin-top: 12px; max-width: 320px; margin-left:auto;">';
+    html += '<table style="width:100%; font-size:13px;"><tbody>';
+    html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Subtotal</td>' +
+            '<td style="padding:4px 8px; text-align:right;">' + formatMoney(subtotal) + '</td></tr>';
+    html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Discount</td>' +
+            '<td style="padding:4px 8px; text-align:right;">- ' + formatMoney(discount) + '</td></tr>';
+    html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Tax</td>' +
+            '<td style="padding:4px 8px; text-align:right;">+ ' + formatMoney(tax) + '</td></tr>';
+    html += '<tr><td style="padding:4px 8px; text-align:right; font-weight:600;">Total</td>' +
+            '<td style="padding:4px 8px; text-align:right; font-weight:600;">' + formatMoney(total) + '</td></tr>';
+    html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Amount Paid</td>' +
+            '<td style="padding:4px 8px; text-align:right;">' + formatMoney(paid) + '</td></tr>';
+    html += '<tr><td style="padding:4px 8px; text-align:right; color:#9ca3af;">Balance</td>' +
+            '<td style="padding:4px 8px; text-align:right;">' + formatMoney(balance) + '</td></tr>';
+    html += '</tbody></table></div>';
+
+    itemsSummary.innerHTML = html;
+}
 
     // Add row button
     if (addItemBtn) addItemBtn.addEventListener('click', addItemRow);
 
     // Live summary updates + product / barcode syncing
-    itemsTableBody.addEventListener('input', function (e) {
-        if (e.target.classList.contains('product-input')) {
-            syncProductFromNameInput(e.target);
-            updateSummary();
-            return;
-        }
+   itemsTableBody.addEventListener('input', function (e) {
+    const row = e.target.closest('tr');
 
-        if (e.target.classList.contains('product-barcode-input')) {
-            syncProductFromBarcodeInput(e.target);
-            updateSummary();
-            return;
-        }
+    if (e.target.classList.contains('product-input')) {
+        syncProductFromNameInput(e.target);
+        updateSummary();
+        return;
+    }
 
-        if (
-            e.target.classList.contains('item-qty') ||
-            e.target.classList.contains('item-cost') ||
-            e.target.classList.contains('item-selling') ||
-            e.target.classList.contains('item-expiry')
-        ) {
-            updateSummary();
+    if (e.target.classList.contains('product-barcode-input')) {
+        syncProductFromBarcodeInput(e.target);
+        updateSummary();
+        return;
+    }
+
+    // Carton qty / carton price changed → recalc unit cost then summary
+    if (
+        e.target.classList.contains('item-carton-qty') ||
+        e.target.classList.contains('item-carton-price')
+    ) {
+        if (row) {
+            updateCostFromCarton(row);
+            updateRowLineTotal(row);
         }
-    });
+        updateSummary();
+        return;
+    }
+
+    if (
+        e.target.classList.contains('item-qty') ||
+        e.target.classList.contains('item-cost') ||
+        e.target.classList.contains('item-selling') ||
+        e.target.classList.contains('item-expiry')
+    ) {
+        if (row) {
+            updateRowLineTotal(row);
+        }
+        updateSummary();
+    }
+});
+
 
     itemsTableBody.addEventListener('click', function (e) {
         if (e.target.classList.contains('remove-item-btn')) {

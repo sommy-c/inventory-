@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Mail\LowStockAlertMail;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\DB; // 🔹 added if you want transaction
 
 class SalesController extends Controller
 {
@@ -24,57 +25,55 @@ class SalesController extends Controller
     }
 
     public function addToCart(Request $request)
-{
-    $search = $request->input('search');
+    {
+        $search = $request->input('search');
 
-    $product = Product::query()
-        ->where(function ($q) use ($search) {
-            $q->where('sku', $search)
-              ->orWhere('barcode', $search)
-              ->orWhere('name', 'like', "%{$search}%");
-        })
-        ->first();
+        $product = Product::query()
+            ->where(function ($q) use ($search) {
+                $q->where('sku', $search)
+                  ->orWhere('barcode', $search)
+                  ->orWhere('name', 'like', "%{$search}%");
+            })
+            ->first();
 
-    if (!$product) {
-        return response()->json(['error' => 'Product not found'], 404);
+        if (!$product) {
+            return response()->json(['error' => 'Product not found'], 404);
+        }
+
+        // 🔴 BLOCK suspended here
+        if ($product->is_suspended || $product->status === 'suspended') {
+            return response()->json([
+                'error' => 'This product is suspended and cannot be sold.'
+            ], 422);
+        }
+
+        if ($product->quantity <= 0) {
+            return response()->json([
+                'error' => 'Product is out of stock.'
+            ], 422);
+        }
+
+        return response()->json($product);
     }
 
-    // 🔴 BLOCK suspended here
-    if ($product->is_suspended || $product->status === 'suspended') {
-        return response()->json([
-            'error' => 'This product is suspended and cannot be sold.'
-        ], 422);
+    public function searchProducts(Request $request)
+    {
+        $name = $request->query('name');
+
+        $products = Product::query()
+            ->where(function ($q) use ($name) {
+                $q->where('name', 'like', "%{$name}%")
+                  ->orWhere('sku', 'like', "%{$name}%")
+                  ->orWhere('barcode', 'like', "%{$name}%");
+            })
+            ->where('is_suspended', false)          // 🔴 block suspended
+            ->where('status', '!=', 'suspended')    // (extra safety)
+            ->where('quantity', '>', 0)
+            ->limit(10)
+            ->get();
+
+        return response()->json($products);
     }
-
-    if ($product->quantity <= 0) {
-        return response()->json([
-            'error' => 'Product is out of stock.'
-        ], 422);
-    }
-
-    return response()->json($product);
-}
-
-
-   public function searchProducts(Request $request)
-{
-    $name = $request->query('name');
-
-    $products = Product::query()
-        ->where(function ($q) use ($name) {
-            $q->where('name', 'like', "%{$name}%")
-              ->orWhere('sku', 'like', "%{$name}%")
-              ->orWhere('barcode', 'like', "%{$name}%");
-        })
-        ->where('is_suspended', false)          // 🔴 block suspended
-        ->where('status', '!=', 'suspended')    // (extra safety)
-        ->where('quantity', '>', 0)
-        ->limit(10)
-        ->get();
-
-    return response()->json($products);
-}
-
 
     public function storeCustomer(Request $request)
     {
@@ -97,127 +96,171 @@ class SalesController extends Controller
      * Finalize sale (POS checkout) with VAT logic.
      */
     public function checkout(Request $request)
-    {
-        $request->validate([
-            'items'              => 'required|array|min:1',
-            'items.*.id'         => 'required|integer|exists:products,id',
-            'items.*.qty'        => 'required|numeric|min:1',
-            'items.*.price'      => 'required|numeric|min:0',
-            'items.*.sku'        => 'required|string',
-            'items.*.name'       => 'required|string',
-            'payment_method'     => 'required|string',
-            'amount_paid'        => 'required|numeric|min:0',
-            'customer_name'      => 'nullable|string|max:255',
-            'customer_phone'     => 'nullable|string|max:50',
-            'customer_email'     => 'nullable|email|max:255',
-            'discount'           => 'nullable|numeric|min:0',
-            'fee'                => 'nullable|numeric|min:0',
-        ]);
+{
+    $request->validate([
+        'items'              => 'required|array|min:1',
+        'items.*.id'         => 'required|integer|exists:products,id',
+        'items.*.qty'        => 'required|numeric|min:1',
+        'items.*.price'      => 'required|numeric|min:0',
+        'items.*.sku'        => 'required|string',
+        'items.*.name'       => 'required|string',
+        'payment_method'     => 'required|string',
+        'amount_paid'        => 'required|numeric|min:0',
+        'customer_name'      => 'nullable|string|max:255',
+        'customer_phone'     => 'nullable|string|max:50',
+        'customer_email'     => 'nullable|email|max:255',
+        'discount'           => 'nullable|numeric|min:0',
+        'fee'                => 'nullable|numeric|min:0',
+    ]);
 
-        $items = $request->items;
+    $items = $request->input('items', []);
 
-        // VAT rate from settings (e.g. 0.075 for 7.5%)
-        $vatRate    = Setting::vatRate();      // fraction
-        $vatPercent = Setting::vatPercent();   // e.g. 7.5
+    // VAT from settings
+    $vatRate    = Setting::vatRate();    // e.g. 0.075
+    $vatPercent = Setting::vatPercent(); // e.g. 7.5
 
-        $subtotal         = 0; // all items
-        $vatableSubtotal  = 0; // only VATable items
-        $productsById     = [];
+    $subtotal        = 0; // all items
+    $vatableSubtotal = 0; // only VATable items
 
-        // STOCK VALIDATION + subtotals
-        foreach ($items as $item) {
-            $product = Product::find($item['id']);
+    /**
+     * First pass:
+     * - Make sure all products exist
+     * - Block suspended
+     * - Basic stock validation
+     * - Compute subtotals (no DB writes yet)
+     */
+    foreach ($items as $item) {
+        $product = Product::find($item['id']);
 
-            if (!$product) {
-                return response()->json([
-                    'error' => "Product not found.",
-                ], 422);
-            }
-
-            if ($item['qty'] > $product->quantity) {
-                return response()->json([
-                    'error' => "{$product->name} has only {$product->quantity} left."
-                ], 422);
-            }
-
-            $lineNet = $item['qty'] * $item['price']; // price assumed pre-VAT
-
-            $subtotal += $lineNet;
-
-            if ($product->is_vatable) {
-                $vatableSubtotal += $lineNet;
-            }
-
-            $productsById[$product->id] = $product;
+        if (!$product) {
+            return response()->json([
+                'error' => 'Product not found.',
+            ], 422);
         }
 
-        $discount  = $request->discount ?? 0;
-        $fee       = $request->fee ?? 0;
-        $vatAmount = round($vatableSubtotal * $vatRate, 2);
+        // Block suspended here too
+        if ($product->is_suspended || $product->status === 'suspended') {
+            return response()->json([
+                'error' => "Product {$product->name} is suspended and cannot be sold.",
+            ], 422);
+        }
 
-        $total = $subtotal - $discount + $fee + $vatAmount;
-        $change = $request->amount_paid - $total;
+        if ($item['qty'] > $product->quantity) {
+            return response()->json([
+                'error' => "{$product->name} has only {$product->quantity} left.",
+            ], 422);
+        }
 
-        $sale = Sale::create([
-            'user_id'        => Auth::id(),
-            'customer_name'  => $request->customer_name,
-            'customer_phone' => $request->customer_phone,
-            'customer_email' => $request->customer_email,
-            'subtotal'       => $subtotal,
-            'vat_amount'     => $vatAmount,
-            'vat_rate'       => $vatPercent,  // store percentage used
-            'discount'       => $discount,
-            'fee'            => $fee,
-            'total'          => $total,
-            'amount_paid'    => $request->amount_paid,
-            'change'         => $change,
-            'payment_method' => $request->payment_method,
-            'status'         => 'completed',
-        ]);
+        $lineNet = $item['qty'] * $item['price']; // price assumed pre-VAT
+        $subtotal += $lineNet;
 
-        // Save sale items + update stock
-        foreach ($items as $item) {
-            /** @var Product $product */
-            $product = $productsById[$item['id']];
+        if ($product->is_vatable) {
+            $vatableSubtotal += $lineNet;
+        }
+    }
 
-            // reduce stock
-            $product->quantity -= $item['qty'];
-            $product->save();
+    $discount  = $request->discount ?? 0;
+    $fee       = $request->fee ?? 0;
+    $vatAmount = round($vatableSubtotal * $vatRate, 2);
 
-            $lineNet = $item['qty'] * $item['price'];
+    $total = $subtotal - $discount + $fee + $vatAmount;
+    if ($total < 0) {
+        $total = 0; // safety – don’t allow negative totals
+    }
 
-            SaleItem::create([
-                'sale_id'    => $sale->id,
-                'product_id' => $item['id'],
-                'sku'        => $item['sku'],
-                'name'       => $item['name'],
-                'qty'        => $item['qty'],
-                'price'      => $item['price'],      // per unit (pre-VAT)
-                'subtotal'   => $lineNet,            // line total (pre-VAT)
+    $change = $request->amount_paid - $total;
+
+    try {
+        $sale = DB::transaction(function () use (
+            $request,
+            $subtotal,
+            $vatAmount,
+            $vatPercent,
+            $discount,
+            $fee,
+            $total,
+            $change,
+            $items
+        ) {
+            // Create sale
+            $sale = Sale::create([
+                'user_id'        => Auth::id(),
+                'customer_name'  => $request->customer_name,
+                'customer_phone' => $request->customer_phone,
+                'customer_email' => $request->customer_email,
+                'subtotal'       => $subtotal,
+                'vat_amount'     => $vatAmount,
+                'vat_rate'       => $vatPercent,  // store percentage used
+                'discount'       => $discount,
+                'fee'            => $fee,
+                'total'          => $total,
+                'amount_paid'    => $request->amount_paid,
+                'change'         => $change,
+                'payment_method' => $request->payment_method,
+                'status'         => 'completed',
             ]);
-        }
-        foreach ($request->items as $itemData) {
-    $product = Product::findOrFail($itemData['id']);
 
-    if ($product->is_suspended || $product->status === 'suspended') {
+            // Save sale items + update stock (with row lock)
+            foreach ($items as $item) {
+                /** @var Product|null $product */
+                $product = Product::lockForUpdate()->find($item['id']);
+
+                if (!$product) {
+                    throw new \RuntimeException("Product ID {$item['id']} not found during checkout.");
+                }
+
+                // Re-check suspended status inside the lock
+                if ($product->is_suspended || $product->status === 'suspended') {
+                    throw new \RuntimeException("Product {$product->name} is suspended and cannot be sold.");
+                }
+
+                // Re-check stock with the locked row
+                if ($item['qty'] > $product->quantity) {
+                    throw new \RuntimeException("{$product->name} has only {$product->quantity} left.");
+                }
+
+                // Reduce stock
+                $product->quantity -= $item['qty'];
+
+                // Auto status update based on quantity (but don’t override suspended)
+                if (!$product->is_suspended) {
+                    $product->status = $product->quantity > 0 ? 'active' : 'out_of_stock';
+                }
+
+                $product->save();
+
+                $lineNet = $item['qty'] * $item['price'];
+
+                SaleItem::create([
+                    'sale_id'    => $sale->id,
+                    'product_id' => $item['id'],
+                    'sku'        => $item['sku'],
+                    'name'       => $item['name'],
+                    'qty'        => $item['qty'],
+                    'price'      => $item['price'],      // per unit (pre-VAT)
+                    'subtotal'   => $lineNet,            // line total (pre-VAT)
+                ]);
+            }
+
+            return $sale;
+        });
+    } catch (\Throwable $e) {
+        // If anything fails inside the transaction, return a clean JSON error
         return response()->json([
-            'error' => "Product {$product->name} is suspended and cannot be sold."
+            'error' => $e->getMessage(),
         ], 422);
     }
 
-    // ... normal stock / sale logic here
+    return response()->json([
+        'success'      => 'Sale completed successfully',
+        'sale_id'      => $sale->id,
+        'redirect_url' => route('admin.sales.print', $sale->id),
+    ]);
 }
-
-
-        return response()->json([
-            'success'      => 'Sale completed successfully',
-            'sale_id'      => $sale->id,
-            'redirect_url' => route('admin.sales.print', $sale->id),
-        ]);
-    }
 
     /**
      * Pause a sale (hold) – still calculate VAT so total is accurate.
+     * ⚠️ Notice: NO stock changes here.
      */
     public function pause(Request $request)
     {
@@ -241,23 +284,33 @@ class SalesController extends Controller
 
         $subtotal        = 0;
         $vatableSubtotal = 0;
+foreach ($items as $item) {
+    $product = Product::find($item['id']);
 
-        foreach ($items as $item) {
-            $product = Product::find($item['id']);
+    if (!$product) {
+        return response()->json(['error' => 'Product not found'], 422);
+    }
 
-            if (!$product) {
-                return response()->json([
-                    'error' => 'Product not found',
-                ], 422);
-            }
+    if ($product->is_suspended || $product->status === 'suspended') {
+        return response()->json([
+            'error' => "Product {$product->name} is suspended and cannot be sold or held."
+        ], 422);
+    }
 
-            $lineNet = $item['qty'] * $item['price'];
-            $subtotal += $lineNet;
+    if ($item['qty'] > $product->quantity) {
+        return response()->json([
+            'error' => "{$product->name} has only {$product->quantity} left."
+        ], 422);
+    }
 
-            if ($product->is_vatable) {
-                $vatableSubtotal += $lineNet;
-            }
-        }
+    $lineNet = $item['qty'] * $item['price'];
+    $subtotal += $lineNet;
+
+    if ($product->is_vatable) {
+        $vatableSubtotal += $lineNet;
+    }
+}
+
 
         $vatAmount = round($vatableSubtotal * $vatRate, 2);
         $total     = $subtotal + $vatAmount; // no discount/fee for paused
@@ -289,7 +342,6 @@ class SalesController extends Controller
                 'subtotal'   => $item['qty'] * $item['price'],
             ]);
         }
-        
 
         return response()->json([
             'success' => true,
@@ -350,9 +402,16 @@ class SalesController extends Controller
             }
         }
 
-        $query = Sale::with('items', 'user')
-            ->where('status', '!=', 'paused')
-            ->orderByDesc('created_at');
+        // ✅ load product + latest purchase cost
+        $query = Sale::with([
+            'items.product',
+            'items.product.purchaseItems' => function($q) {
+                $q->latest(); // gets most recent cost price
+            },
+            'user'
+        ])
+        ->where('status', '!=', 'paused')
+        ->orderByDesc('created_at');
 
         if (!empty($fromDate)) {
             $query->whereDate('created_at', '>=', $fromDate);
@@ -386,45 +445,35 @@ class SalesController extends Controller
             });
         }
 
-        // SUMMARY (current filters)
+        // SUMMARY
         $summaryQuery   = clone $query;
         $totalSales     = $summaryQuery->sum('total');
         $totalDiscount  = (clone $summaryQuery)->sum('discount');
         $totalFee       = (clone $summaryQuery)->sum('fee');
-        $totalVat       = (clone $summaryQuery)->sum('vat_amount'); // 🔹 VAT summary
+        $totalVat       = (clone $summaryQuery)->sum('vat_amount');
         $countSales     = (clone $summaryQuery)->count();
 
-        // OVERALL TOTALS (date range only, exclude paused)
-        $overallQuery = Sale::query()
-            ->where('status', '!=', 'paused');
+        // ✅ compute TOTAL PROFIT (filtered)
+        $summarySales = (clone $summaryQuery)->get();
 
-        if (!empty($fromDate)) {
-            $overallQuery->whereDate('created_at', '>=', $fromDate);
-        }
-
-        if (!empty($toDate)) {
-            $overallQuery->whereDate('created_at', '<=', $toDate);
-        }
-
-        $overallTotal = $overallQuery->sum('total');
-        $overallCount = (clone $overallQuery)->count();
-
-        // CASHIER-SPECIFIC TOTAL
-        $cashierTotal = null;
-        $cashierCount = null;
-
-        if (!empty($cashierFilter)) {
-            $cashierQuery = clone $overallQuery;
-
-            $cashierQuery->whereHas('user', function ($q) use ($cashierFilter) {
-                $q->where('name', $cashierFilter);
+        $totalProfit = $summarySales->sum(function ($sale) {
+            return $sale->items->sum(function ($item) {
+                // get latest cost price from PurchaseItem
+                $cost = optional($item->product->purchaseItems->first())->cost_price ?? 0;
+                return ($item->price - $cost) * $item->qty;
             });
+        });
 
-            $cashierTotal = $cashierQuery->sum('total');
-            $cashierCount = (clone $cashierQuery)->count();
-        }
-
+        // PAGINATION + profit per row
         $sales = $query->paginate($perPage)->appends($request->query());
+
+        $sales->getCollection()->transform(function ($sale) {
+            $sale->profit = $sale->items->sum(function ($item) {
+                $cost = optional($item->product->purchaseItems->first())->cost_price ?? 0;
+                return ($item->price - $cost) * $item->qty;
+            });
+            return $sale;
+        });
 
         return view('sales.index', [
             'sales'         => $sales,
@@ -438,12 +487,9 @@ class SalesController extends Controller
             'totalSales'    => $totalSales,
             'totalDiscount' => $totalDiscount,
             'totalFee'      => $totalFee,
-            'totalVat'      => $totalVat,     // 🔹 pass VAT summary
+            'totalVat'      => $totalVat,
+            'totalProfit'   => $totalProfit,   // ✅ NOW AVAILABLE
             'countSales'    => $countSales,
-            'overallTotal'  => $overallTotal,
-            'overallCount'  => $overallCount,
-            'cashierTotal'  => $cashierTotal,
-            'cashierCount'  => $cashierCount,
             'errorMessage'  => $errorMessage,
         ]);
     }
@@ -577,19 +623,19 @@ class SalesController extends Controller
     }
 
     public function sendDailySummary()
-{
-    $today = now()->toDateString();
+    {
+        $today = now()->toDateString();
 
-    $totalSales = Sale::whereDate('created_at', $today)->sum('total');
-    $totalVat   = Sale::whereDate('created_at', $today)->sum('vat_amount');
-    $count      = Sale::whereDate('created_at', $today)->count();
+        $totalSales = Sale::whereDate('created_at', $today)->sum('total');
+        $totalVat   = Sale::whereDate('created_at', $today)->sum('vat_amount');
+        $count      = Sale::whereDate('created_at', $today)->count();
 
-    $adminEmail = Setting::get('notify_admin_email');
+        $adminEmail = Setting::get('notify_admin_email');
 
-    if ($adminEmail) {
-        Mail::to($adminEmail)->send(
-            new DailySummaryMail($totalSales, $totalVat, $count, $today)
-        );
+        if ($adminEmail) {
+            Mail::to($adminEmail)->send(
+                new DailySummaryMail($totalSales, $totalVat, $count, $today)
+            );
+        }
     }
-}
 }

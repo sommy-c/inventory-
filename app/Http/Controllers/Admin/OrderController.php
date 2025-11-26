@@ -140,57 +140,46 @@ class OrderController extends Controller
      * Admin approval: waiting -> pending
      */
     public function approve(Order $order)
-    {
-        $user    = Auth::user();
-        $isAdmin = $user && ($user->is_admin ?? false);
+{
+    // ✅ At this point, middleware('role:admin') has already ensured user is admin
+    $user = Auth::user();
 
-        if (!$isAdmin) {
-            abort(403, 'Only admin can approve orders.');
-        }
-
-        if (!$order->isWaiting()) {
-            return redirect()
-                ->route('admin.show', $order)
-                ->with('error', 'Only waiting orders can be approved.');
-        }
-
-        $order->update([
-            'status'            => 'pending',
-            'admin_name'        => $user->name,
-            'admin_approved_at' => now(),
-        ]);
-
+    if (!$order->isWaiting()) {
         return redirect()
-            ->route('admin.show', $order)
-            ->with('success', 'Order approved and now pending supply.');
+            ->route('admin.show', $order) // we'll fix route name below
+            ->with('error', 'Only waiting orders can be approved.');
     }
+
+    $order->update([
+        'status'            => 'pending',
+        'admin_name'        => $user->name,
+        'admin_approved_at' => now(),
+    ]);
+
+    return redirect()
+        ->route('admin.show', $order)
+        ->with('success', 'Order approved and now pending supply.');
+}
 
     /**
      * Mark as supplied (after goods received)
      */
     public function markSupplied(Order $order)
-    {
-        $user    = Auth::user();
-        $isAdmin = $user && ($user->is_admin ?? false);
-
-        if (!$isAdmin) {
-            abort(403, 'Only admin can mark orders as supplied.');
-        }
-
-        if ($order->isSupplied()) {
-            return redirect()
-                ->route('admin.show', $order)
-                ->with('info', 'Order already marked as supplied.');
-        }
-
-        $order->update([
-            'status' => 'supplied',
-        ]);
-
-        // Here you could also update Product quantities if you connect items to products
-
+{
+    // ✅ Already checked by middleware('role:admin')
+    if ($order->isSupplied()) {
         return redirect()
-            ->route('admin.show', $order)
-            ->with('success', 'Order marked as supplied.');
+            ->route('admin.orders.show', $order)
+            ->with('info', 'Order already marked as supplied.');
     }
+
+    $order->update([
+        'status' => 'supplied',
+    ]);
+
+    return redirect()
+        ->route('admin.show', $order)
+        ->with('success', 'Order marked as supplied.');
+}
+
 }

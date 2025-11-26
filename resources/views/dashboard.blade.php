@@ -203,6 +203,13 @@ body.theme-dark .dashboard-page .chart-card h3 {
 body.theme-light .dashboard-page .chart-card h3 {
     color: var(--orange-strong);
 }
+/* pies can be a bit smaller than line chart */
+#stockChart,
+#paymentWeekChart,
+#categoryChart {
+    max-height: 170px;
+}
+
 
 /* responsive */
 @media (max-width: 640px) {
@@ -213,18 +220,31 @@ body.theme-light .dashboard-page .chart-card h3 {
 }
 </style>
 
+@php
+    $user      = auth()->user();
+    $isAdmin   = $user->hasRole('admin');
+    $isManager = $user->hasRole('manager');
+    $isCashier = $user->hasRole('cashier');
+@endphp
+
 <div class="dashboard-page">
 
     <div class="page-header">
         <h1>Dashboard</h1>
         <div class="header-actions">
-            {{-- Example header actions --}}
-            {{-- <a href="#" class="btn-primary">New Sale</a> --}}
+            @if($isAdmin || $isManager)
+                <a href="{{ route('admin.sales.pos') }}" class="btn-primary">New Sale</a>
+                <a href="{{ route('admin.sales.index') }}" class="btn-secondary">Sales Report</a>
+                <a href="{{ route('admin.purchases.create') }}" class="btn-secondary">New Purchase</a>
+            @elseif($isCashier)
+                <a href="{{ route('admin.sales.pos') }}" class="btn-primary">Open POS</a>
+            @endif
         </div>
     </div>
 
     <div class="widgets">
-        @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('manager'))
+        {{-- ADMIN: full stats --}}
+        @if($isAdmin)
             <div class="widget">
                 <div class="widget-label">Total Sales Today</div>
                 <div class="widget-value" id="salesCounter">0</div>
@@ -246,10 +266,26 @@ body.theme-light .dashboard-page .chart-card h3 {
                     {{ $topProduct->name ?? 'N/A' }}
                 </div>
             </div>
-        @elseif(auth()->user()->hasRole('cashier'))
+
+        {{-- MANAGER: no totals, just low stock + top product --}}
+        @elseif($isManager)
             <div class="widget">
-                <div class="widget-label">Today's Sales</div>
-                <div class="widget-value" id="salesCounter">0</div>
+                <div class="widget-label">Low Stock Items</div>
+                <div class="widget-value" id="lowStockCounter">0</div>
+            </div>
+
+            <div class="widget">
+                <div class="widget-label">Top Selling Product</div>
+                <div class="widget-value widget-text">
+                    {{ $topProduct->name ?? 'N/A' }}
+                </div>
+            </div>
+
+        {{-- CASHIER --}}
+        @elseif($isCashier)
+            <div class="widget">
+                <div class="widget-label">Held Sales</div>
+                <div class="widget-value" id="heldCounter">0</div>
             </div>
 
             <div class="widget">
@@ -259,12 +295,36 @@ body.theme-light .dashboard-page .chart-card h3 {
         @endif
     </div>
 
-    {{-- SALES CHART --}}
-    @if(auth()->user()->hasRole('admin') || auth()->user()->hasRole('manager'))
-        <div class="chart-card">
-            <h3>Sales Overview (Last 7 Days)</h3>
-            <canvas id="salesChart" height="250"></canvas>
+    {{-- CHARTS --}}
+    @if($isAdmin || $isManager || $isCashier)
+
+        {{-- Stock + Category (ALL ROLES) --}}
+        <div class="widgets">
+            <div class="chart-card">
+                <h3>Stock Status</h3>
+                <canvas id="stockChart" height="180"></canvas>
+            </div>
+
+            <div class="chart-card">
+                <h3>Sales by Category (Last 30 Days)</h3>
+                <canvas id="categoryChart" height="180"></canvas>
+            </div>
         </div>
+
+        {{-- Admin/Manager extra charts --}}
+        @if($isAdmin || $isManager)
+            <div class="chart-card">
+                <h3>Sales Overview (Last 7 Days)</h3>
+                <canvas id="salesChart" height="200"></canvas>
+            </div>
+
+            <div class="widgets">
+                <div class="chart-card">
+                    <h3>Sales by Payment Method (Last 7 Days)</h3>
+                    <canvas id="paymentWeekChart" height="180"></canvas>
+                </div>
+            </div>
+        @endif
     @endif
 
 </div> {{-- /.dashboard-page --}}
@@ -275,14 +335,26 @@ body.theme-light .dashboard-page .chart-card h3 {
 // @ts-nocheck   // ignore TS warnings in this Blade-mixed JS file
 
 window.dashboardData = JSON.parse(`{!! json_encode([
-    'todaySales'     => $todaySales    ?? 0,
-    'todayProfit'    => $todayProfit   ?? 0,
-    'lowStockCount'  => $lowStockCount ?? 0,
-    'chartDays'      => $chartDays     ?? [],
-    'chartTotals'    => $chartTotals   ?? [],
-    'isAdmin'        => auth()->user()->hasRole('admin') || auth()->user()->hasRole('manager'),
+    'todaySales'          => $todaySales        ?? 0,
+    'todayProfit'         => $todayProfit       ?? 0,
+    'lowStockCount'       => $lowStockCount     ?? 0,
+    'heldSalesCount'      => $heldSalesCount    ?? 0,
+    'chartDays'           => $chartDays         ?? [],
+    'chartTotals'         => $chartTotals       ?? [],
+    'isAdmin'             => auth()->user()->hasRole('admin') || auth()->user()->hasRole('manager'),
+
+    'stockStatusLabels'   => $stockStatusLabels ?? [],
+    'stockStatusData'     => $stockStatusData   ?? [],
+    'paymentWeekLabels'   => $paymentWeekLabels ?? [],
+    'paymentWeekData'     => $paymentWeekData   ?? [],
+    'categoryLabels'      => $categoryLabels    ?? [],
+    'categoryData'        => $categoryData      ?? [],
 ]) !!}`);
 
+
+/**
+ * Simple numeric counter animation
+ */
 function animateCounter(id, target) {
     const el = document.getElementById(id);
     if (!el) return;
@@ -306,7 +378,11 @@ function animateCounter(id, target) {
     }, 20);
 }
 
-let salesChartInstance = null;
+let salesChartInstance      = null;
+let stockChartInstance      = null;
+let paymentWeekInstance     = null;
+let categoryChartInstance   = null;
+
 
 function initDashboard() {
     const d = window.dashboardData || {};
@@ -314,22 +390,19 @@ function initDashboard() {
     const salesEl    = document.getElementById('salesCounter');
     const profitEl   = document.getElementById('profitCounter');
     const lowStockEl = document.getElementById('lowStockCounter');
+    const heldEl     = document.getElementById('heldCounter');
 
     if (salesEl)    salesEl.innerText    = '0';
     if (profitEl)   profitEl.innerText   = '0';
     if (lowStockEl) lowStockEl.innerText = '0';
+    if (heldEl)     heldEl.innerText     = '0';
 
     animateCounter('salesCounter',    d.todaySales);
     animateCounter('profitCounter',   d.todayProfit);
     animateCounter('lowStockCounter', d.lowStockCount);
+    animateCounter('heldCounter',     d.heldSalesCount);
 
-    if (!d.isAdmin) return;
-
-    const canvas = document.getElementById('salesChart');
-    if (!canvas || !Array.isArray(d.chartDays) || !Array.isArray(d.chartTotals)) return;
     if (typeof Chart === 'undefined') return;
-
-    const ctx = canvas.getContext('2d');
 
     // detect light/dark from body class (same as other pages)
     const isLight = document.body.classList.contains('theme-light');
@@ -337,48 +410,139 @@ function initDashboard() {
     const axisTextColor   = isLight ? '#9a3412' : '#e5e7eb';
     const gridColor       = isLight ? 'rgba(148,163,184,0.35)' : 'rgba(255,255,255,0.1)';
     const legendTextColor = axisTextColor;
+    const borderColor     = isLight ? '#f97316' : '#2563eb';
+    const fillColor       = isLight ? 'rgba(249,115,22,0.15)' : 'rgba(37,99,235,0.2)';
 
-    // Optional: adjust chart line color a bit for light mode
-    const borderColor = isLight ? '#f97316' : '#2563eb';
-    const fillColor   = isLight ? 'rgba(249,115,22,0.15)' : 'rgba(37,99,235,0.2)';
+    // ===================== LINE CHART (7-day sales) =====================
+    if (d.isAdmin) {
+        const canvas = document.getElementById('salesChart');
+        if (canvas && Array.isArray(d.chartDays) && Array.isArray(d.chartTotals)) {
+            const ctx = canvas.getContext('2d');
 
-    if (salesChartInstance && typeof salesChartInstance.destroy === 'function') {
-        salesChartInstance.destroy();
+            if (salesChartInstance && typeof salesChartInstance.destroy === 'function') {
+                salesChartInstance.destroy();
+            }
+
+            salesChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: d.chartDays,
+                    datasets: [{
+                        label: 'Sales',
+                        data: d.chartTotals,
+                        backgroundColor: fillColor,
+                        borderColor: borderColor,
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            labels: { color: legendTextColor }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: axisTextColor },
+                            grid:  { color: gridColor }
+                        },
+                        y: {
+                            ticks: { color: axisTextColor },
+                            grid:  { color: gridColor }
+                        }
+                    }
+                }
+            });
+        }
     }
 
-    salesChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: d.chartDays,
-            datasets: [{
-                label: 'Sales',
-                data: d.chartTotals,
-                backgroundColor: fillColor,
-                borderColor: borderColor,
-                borderWidth: 2,
-                tension: 0.3,
-                fill: true
-            }]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    labels: { color: legendTextColor }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: { color: axisTextColor },
-                    grid:  { color: gridColor }
-                },
-                y: {
-                    ticks: { color: axisTextColor },
-                    grid:  { color: gridColor }
-                }
-            }
+    // ===================== PIE / DOUGHNUT CHARTS =====================
+
+    // Stock status (healthy / low / out / suspended)
+    const stockCanvas = document.getElementById('stockChart');
+    if (stockCanvas && Array.isArray(d.stockStatusLabels) && d.stockStatusLabels.length) {
+        const ctx = stockCanvas.getContext('2d');
+
+        if (stockChartInstance && typeof stockChartInstance.destroy === 'function') {
+            stockChartInstance.destroy();
         }
-    });
+
+        stockChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: d.stockStatusLabels,
+                datasets: [{
+                    data: d.stockStatusData,
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom' }
+                },
+                cutout: '55%',
+            }
+        });
+    }
+
+
+    // Sales by payment method (last 7 days)
+    const paymentWeekCanvas = document.getElementById('paymentWeekChart');
+    if (paymentWeekCanvas && Array.isArray(d.paymentWeekLabels) && d.paymentWeekLabels.length) {
+        const ctx = paymentWeekCanvas.getContext('2d');
+
+        if (paymentWeekInstance && typeof paymentWeekInstance.destroy === 'function') {
+            paymentWeekInstance.destroy();
+        }
+
+        paymentWeekInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: d.paymentWeekLabels,
+                datasets: [{
+                    data: d.paymentWeekData,
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                cutout: '55%',
+            }
+        });
+    }
+
+    // Sales by category (last 30 days)
+    const categoryCanvas = document.getElementById('categoryChart');
+    if (categoryCanvas && Array.isArray(d.categoryLabels) && d.categoryLabels.length) {
+        const ctx = categoryCanvas.getContext('2d');
+
+        if (categoryChartInstance && typeof categoryChartInstance.destroy === 'function') {
+            categoryChartInstance.destroy();
+        }
+
+        categoryChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: d.categoryLabels,
+                datasets: [{
+                    data: d.categoryData,
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                cutout: '55%',
+            }
+        });
+    }
 }
 
 document.addEventListener('DOMContentLoaded', initDashboard);

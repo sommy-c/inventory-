@@ -43,7 +43,7 @@ class PurchaseController extends Controller
         return view('purchases.create', compact('suppliers', 'products'));
     }
 
-   public function store(Request $request)
+  public function store(Request $request)
 {
     // 1) Base validation
     $data = $request->validate([
@@ -56,13 +56,17 @@ class PurchaseController extends Controller
 
         // Either existing product_id OR new name/SKU
         'items.*.product_id'    => 'nullable|exists:products,id',
-        'items.*.name'          => 'nullable|string|max:255', // we’ll enforce "either/or" manually
+        'items.*.name'          => 'nullable|string|max:255',
         'items.*.sku'           => 'nullable|string|max:255',
 
-        'items.*.quantity'      => 'required|integer|min:1',
-        'items.*.cost_price'    => 'required|numeric|min:0',
-        'items.*.selling_price' => 'nullable|numeric|min:0',
-        'items.*.expiry_date'   => 'nullable|date',
+        'items.*.quantity'        => 'required|integer|min:1',
+        'items.*.cost_price'      => 'required|numeric|min:0',   // will be overridden if carton fields filled
+        'items.*.selling_price'   => 'nullable|numeric|min:0',
+        'items.*.expiry_date'     => 'nullable|date',
+
+        // 🔹 NEW: carton fields
+        'items.*.carton_quantity' => 'nullable|integer|min:0',
+        'items.*.carton_price'    => 'nullable|numeric|min:0',
 
         'discount'    => 'nullable|numeric|min:0',
         'tax'         => 'nullable|numeric|min:0',
@@ -101,11 +105,29 @@ class PurchaseController extends Controller
     $purchase = DB::transaction(function () use ($data, $lowStockThreshold, $notifyOnLowStock, $notifyEmail, &$lowStockProducts) {
         $supplier = Supplier::findOrFail($data['supplier_id']);
 
-        // Calculate subtotal from items
+        // 🔹 Calculate subtotal from items (respecting carton fields)
         $subtotal = 0;
-        foreach ($data['items'] as $item) {
-            $subtotal += $item['quantity'] * $item['cost_price'];
-        }
+        $subtotal = 0;
+
+foreach ($data['items'] as &$item) {
+    $qty         = (int) ($item['quantity'] ?? 0);          // cartons
+    $cartonPrice = (float) ($item['carton_price'] ?? 0);
+    $unitCost    = (float) ($item['cost_price'] ?? 0);
+
+    // ✅ Preferred: cartons × carton price
+    if ($qty > 0 && $cartonPrice > 0) {
+        $lineTotal = $qty * $cartonPrice;
+        $item['line_total'] = $lineTotal;
+    }
+    // ✅ Fallback: qty × unit cost
+    else {
+        $lineTotal = $qty * $unitCost;
+        $item['line_total'] = $lineTotal;
+    }
+
+    $subtotal += $lineTotal;
+}
+unset($item);
 
         $discount = $data['discount'] ?? 0;
         $tax      = $data['tax'] ?? 0;
@@ -166,22 +188,29 @@ class PurchaseController extends Controller
                 ]);
             }
 
-            // 2) Line total
-            $lineTotal = $itemData['quantity'] * $itemData['cost_price'];
+            $cartonQty   = isset($itemData['carton_quantity']) ? (int)$itemData['carton_quantity'] : 0;
+            $cartonPrice = isset($itemData['carton_price']) ? (float)$itemData['carton_price'] : 0.0;
+            $unitCost    = (float)$itemData['cost_price']; // already adjusted in first loop if carton present
 
-            // 3) Create PurchaseItem
+            // line total uses unit cost
+            $lineTotal = $itemData['line_total'];
+
+
+            // 3) Create PurchaseItem (assumes carton_quantity & carton_price columns exist)
             PurchaseItem::create([
-                'purchase_id' => $purchase->id,
-                'product_id'  => $product->id,
-                'quantity'    => $itemData['quantity'],
-                'cost_price'  => $itemData['cost_price'],
-                'line_total'  => $lineTotal,
-                'expiry_date' => $itemData['expiry_date'] ?? null,
+                'purchase_id'     => $purchase->id,
+                'product_id'      => $product->id,
+                'quantity'        => $itemData['quantity'],
+                'cost_price'      => $unitCost,
+                'line_total'      => $lineTotal,
+                'expiry_date'     => $itemData['expiry_date'] ?? null,
+                'carton_quantity' => $cartonQty,
+                'carton_price'    => $cartonPrice,
             ]);
 
             // 4) Update product stock & purchasing info
-            $product->quantity        += $itemData['quantity'];
-            $product->purchase_price   = $itemData['cost_price']; // last cost
+            $product->quantity       += $itemData['quantity'];
+            $product->purchase_price  = $unitCost; // last unit cost
 
             if (isset($itemData['selling_price']) && $itemData['selling_price'] !== null) {
                 $product->selling_price = $itemData['selling_price'];
@@ -200,7 +229,6 @@ class PurchaseController extends Controller
                 $lowStockThreshold > 0 &&
                 $product->quantity <= $lowStockThreshold
             ) {
-                // collect it (fresh copy)
                 $lowStockProducts[] = $product->fresh();
             }
         }
@@ -260,45 +288,106 @@ class PurchaseController extends Controller
         ->with('success', 'Purchase recorded successfully.');
 }
 
-    public function show(Request $request, Purchase $purchase)
-    {
-        $purchase->load('supplier', 'items.product', 'user');
 
-        if ($request->ajax()) {
-            $balance = $purchase->total - $purchase->amount_paid;
+public function addPayment(Request $request, Purchase $purchase)
+{
+    // 1) Validate
+    $data = $request->validate([
+        'amount' => 'required|numeric|min:0.01',
+    ]);
 
-            return response()->json([
-                'purchase' => [
-                    'id'             => $purchase->id,
-                    'supplier_name'  => $purchase->supplier->name,
-                    'purchase_date'  => optional($purchase->purchase_date)->format('Y-m-d'),
-                    'reference'      => $purchase->reference,
-                    'subtotal'       => $purchase->subtotal,
-                    'discount'       => $purchase->discount,
-                    'tax'            => $purchase->tax,
-                    'total'          => $purchase->total,
-                    'amount_paid'    => $purchase->amount_paid,
-                    'balance'        => $balance,
-                    'payment_status' => $purchase->payment_status,
-                    'notes'          => $purchase->notes,
-                    'created_by'     => optional($purchase->user)->name,
-                    'items'          => $purchase->items->map(function ($item) {
-                        return [
-                            'product_name' => $item->product->name ?? 'Deleted product',
-                            'sku'          => $item->product->sku ?? null,
-                            'quantity'     => $item->quantity,
-                            'cost_price'   => $item->cost_price,
-                            'line_total'   => $item->line_total,
-                            'expiry_date'  => $item->expiry_date
-                                ? \Carbon\Carbon::parse($item->expiry_date)->format('Y-m-d')
-                                : null,
-                        ];
-                    })->toArray(),
-                ],
-            ]);
-        }
+    $amount  = (float) $data['amount'];
+    $balance = $purchase->total - $purchase->amount_paid;
 
-        // Not AJAX? Just go back to the index page.
-        return redirect()->route('admin.purchases.index');
+    // Optional: prevent overpayment
+    if ($amount > $balance + 0.01) {
+        return response()->json([
+            'errors' => [
+                'amount' => ['Payment amount cannot be greater than remaining balance.'],
+            ]
+        ], 422);
     }
+
+    // 2) Update paid + status
+    $purchase->amount_paid += $amount;
+
+    if ($purchase->total > 0 && $purchase->amount_paid >= $purchase->total) {
+        $purchase->payment_status = 'paid';
+    } elseif ($purchase->amount_paid > 0 && $purchase->amount_paid < $purchase->total) {
+        $purchase->payment_status = 'partial';
+    } else {
+        $purchase->payment_status = 'unpaid';
+    }
+
+    $purchase->save();
+
+    // 3) AJAX JSON response for your JS
+    if ($request->ajax()) {
+        $balance = $purchase->total - $purchase->amount_paid;
+
+        return response()->json([
+            'message'  => 'Payment added successfully.',
+            'purchase' => [
+                'id'             => $purchase->id,
+                'total'          => $purchase->total,
+                'amount_paid'    => $purchase->amount_paid,
+                'payment_status' => $purchase->payment_status,
+                'balance'        => $balance,
+            ],
+        ]);
+    }
+
+    // Non-AJAX fallback
+    return back()->with('success', 'Payment added successfully.');
+}
+public function show(Request $request, Purchase $purchase)
+{
+    $purchase->load('supplier', 'items.product', 'user');
+
+    // 🔹 Recalculate from items to guarantee accuracy
+    $calculatedSubtotal = $purchase->items->sum('line_total');
+    $discount           = $purchase->discount ?? 0;
+    $tax                = $purchase->tax ?? 0;
+
+    $calculatedTotal    = $calculatedSubtotal - $discount + $tax;
+    $amountPaid         = $purchase->amount_paid ?? 0;
+    $balance            = $calculatedTotal - $amountPaid;
+
+    if ($request->ajax()) {
+        return response()->json([
+            'purchase' => [
+                'id'             => $purchase->id,
+                'supplier_name'  => optional($purchase->supplier)->name,
+                'purchase_date'  => optional($purchase->purchase_date)->format('Y-m-d'),
+                'reference'      => $purchase->reference,
+                // 🔹 use recalculated values here
+                'subtotal'       => $calculatedSubtotal,
+                'discount'       => $discount,
+                'tax'            => $tax,
+                'total'          => $calculatedTotal,
+                'amount_paid'    => $amountPaid,
+                'balance'        => $balance,
+                'payment_status' => $purchase->payment_status,
+                'notes'          => $purchase->notes,
+                'created_by'     => optional($purchase->user)->name,
+                'items'          => $purchase->items->map(function ($item) {
+                    return [
+                        'product_name' => $item->product->name ?? 'Deleted product',
+                        'sku'          => $item->product->sku ?? null,
+                        'quantity'     => $item->quantity,
+                        'cost_price'   => $item->cost_price,  // unit cost
+                        'line_total'   => $item->line_total,  // already saved from store()
+                        'expiry_date'  => $item->expiry_date
+                            ? \Carbon\Carbon::parse($item->expiry_date)->format('Y-m-d')
+                            : null,
+                    ];
+                })->toArray(),
+            ],
+        ]);
+    }
+
+    return redirect()->route('admin.purchases.index');
+}
+
+
 }

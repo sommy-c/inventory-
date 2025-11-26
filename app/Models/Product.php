@@ -26,7 +26,7 @@ protected $fillable = [
         'purchase_price' => 'decimal:2',
         'selling_price' => 'decimal:2',
         
-        'is_suspended' => 'boolean',
+        
         'is_vatable'   => 'boolean',
    
     ];

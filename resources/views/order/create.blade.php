@@ -14,9 +14,9 @@
                class="btn-primary po-back-btn">
                 ← Back to Orders
             </a>
-            <button type="button" class="btn-primary po-print-btn" onclick="window.print()">
+            <!-- <button type="button" class="btn-primary po-print-btn" onclick="window.print()">
                 🖨 Print
-            </button>
+            </button> -->
         </div>
     </div>
 

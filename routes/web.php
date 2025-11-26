@@ -81,7 +81,9 @@ Route::middleware(['auth', 'role:admin|manager'])
     Route::get('purchases/create',       [PurchaseController::class, 'create'])->name('purchases.create');
     Route::post('purchases',             [PurchaseController::class, 'store'])->name('purchases.store');
     Route::get('purchases/{purchase}',   [PurchaseController::class, 'show'])->name('purchases.show');
-    
+     Route::post('/purchases/{purchase}/add-payment', [PurchaseController::class, 'addPayment'])
+            ->name('purchases.addPayment');
+   
 
     /*
     |----------------------------------------------------------------------
@@ -136,7 +138,7 @@ Route::middleware(['auth', 'role:admin|manager'])
         Route::delete('orders/{order}',    [OrderController::class, 'destroy'])->name('destroy');
 
         // extra actions
-        Route::post('orders/{order}/approve',      [OrderController::class, 'approve'])->name('approve');
+       
         Route::post('orders/{order}/supplied',     [OrderController::class, 'markSupplied'])->name('supplied');
 
     /*
@@ -197,6 +199,10 @@ Route::middleware(['auth', 'role:admin|manager'])
         // Notifications
         Route::get('settings/notifications',  [SettingController::class, 'notifications'])->name('settings.notifications');
         Route::post('settings/notifications', [SettingController::class, 'updateNotifications']);
+
+
+        // Order
+         Route::post('orders/{order}/approve',      [OrderController::class, 'approve'])->name('approve');
     });
 });
 
@@ -249,6 +255,8 @@ Route::middleware(['auth', 'role:admin|manager|cashier'])
 
         // Dashboard + alerts
         Route::get('dashboard', [ProductController::class, 'dashboard'])->name('dashboard');
+        Route::get('/products/json/{product}', [ProductController::class, 'json'])
+    ->name('admin.products.json');
         Route::post('alerts/mark-read', [ProductController::class, 'markRead'])->name('alerts.markRead');
     });
 

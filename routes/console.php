@@ -23,11 +23,14 @@ Artisan::command('send:daily-summary', function () {
     $totalSales = $salesQuery->sum('total');
     $countSales = $salesQuery->count();
 
-    $summary = [
-        'date'        => $today,
-        'totalSales'  => $totalSales,
-        'countSales'  => $countSales,
-    ];
+   $summary = [
+    'date'        => $today,
+    'totalSales'  => $totalSales,
+    'countSales'  => $countSales,
+];
+
+
+
 
     // CHANGE THIS to your real admin email or use Setting::get(...)
     $to = 'admin@example.com';

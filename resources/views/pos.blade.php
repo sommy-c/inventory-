@@ -68,6 +68,7 @@ body.theme-dark #flash-message.flash-message {
     max-width: 1280px;
     margin: 16px auto;
     padding: 12px;
+    box-sizing: border-box;
 }
 
 /* light wrapper card */
@@ -90,8 +91,10 @@ body.theme-dark .pos-wrapper {
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    min-width: 150px;
+    min-width: 190px;
+    max-width: 240px;
     border-radius: 14px;
+    box-sizing: border-box;
 }
 
 /* light sidebar */
@@ -112,6 +115,7 @@ body.theme-dark .pos-sidebar {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    min-width: 0; /* allow shrinking */
 }
 
 /* SECTIONS */
@@ -120,6 +124,7 @@ body.theme-dark .pos-sidebar {
 .totals-area {
     border-radius: 14px;
     padding: 12px 14px;
+    box-sizing: border-box;
 }
 
 /* light sections */
@@ -246,6 +251,7 @@ body.theme-light .top-info #add-customer-btn:hover {
     flex-direction: column;
     gap: 3px;
     min-width: 140px;
+    flex: 1 1 140px;
 }
 
 .info-box label {
@@ -341,10 +347,16 @@ body.theme-light #search-results {
     border: 1px solid rgba(209,213,219,0.9);
 }
 
+/* table wrapper for responsiveness */
+.table-area {
+    overflow-x: auto;
+}
+
 /* table */
 .pos-table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 720px;
 }
 
 /* header */
@@ -366,7 +378,7 @@ body.theme-light .pos-table thead {
 
 /* head text */
 body.theme-dark .pos-table th {
-    color: #e5e7eb;
+    color: #f9fafb;  /* ✅ light text on dark gradient */
 }
 body.theme-light .pos-table th {
     color: var(--orange-strong);
@@ -412,42 +424,78 @@ body.theme-light .pos-table td {
 .totals-area {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    gap: 16px;
     align-items: stretch;
     flex-wrap: wrap;
+    margin-top: 10px;
 }
 
 .small-totals {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 220px;
 }
 
 .small-totals > div {
     display: flex;
     justify-content: space-between;
-    font-size: 14px;
+    align-items: center;
+    font-size: 13px;
+    padding: 4px 8px;
+    border-radius: 8px;
 }
 
-/* labels */
+/* light theme styling */
+body.theme-light .small-totals > div {
+    background: rgba(255,255,255,0.9);
+    border: 1px solid var(--border-soft);
+}
+
+/* dark theme styling */
+body.theme-dark .small-totals > div {
+    background: rgba(15,23,42,0.96);
+    border: 1px solid rgba(55,65,81,0.8);
+}
+
 .small-totals label {
     font-weight: 600;
+    font-size: 12px;
 }
 
-/* big total */
+/* numbers on the right */
+.small-totals span {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* highlight grand total */
+body.theme-light #grand-total {
+    color: var(--orange-strong);
+}
+body.theme-dark #grand-total {
+    color: #e5e7eb;
+}
+
 .big-total {
     margin-left: auto;
     text-align: right;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
 }
 
 .big-total p {
     margin: 0;
-    font-size: 14px;
+    font-size: 13px;
+    opacity: 0.8;
 }
 
 .big-total h1 {
-    margin: 4px 0 8px;
+    margin: 0;
     font-size: 26px;
+    font-variant-numeric: tabular-nums;
 }
 
 /* override checkout button look to match theme (uses .side-btn) */
@@ -460,16 +508,14 @@ body.theme-light .big-total #make-payment:hover {
     background: var(--orange-light-hover);
 }
 
-/* ========== QTY WRAPPER ========== */
+/* ========== QTY WRAPPER & BUTTONS ========== */
 .qty-wrapper {
     display: inline-flex;
     align-items: center;
     gap: 4px;
 }
 
-/* ========== QTY BUTTONS (+ / -) ========== */
-
-/* dark theme qty buttons (original look) */
+/* dark theme qty buttons */
 body.theme-dark .qty-btn {
     min-width: 28px;
     height: 28px;
@@ -523,8 +569,7 @@ body.theme-light .qty-btn:hover {
     transform: none;
 }
 
-/* ========== QTY INPUT FIELD ========== */
-
+/* QTY INPUT */
 body.theme-dark .qty-input {
     width: 50px;
     height: 28px;
@@ -606,6 +651,36 @@ body.theme-light .delete-item:hover {
 .delete-item svg,
 .delete-item i {
     font-size: 14px;
+}
+
+/* small square delete button (if used) */
+.delete-btn {
+    background: #e3342f;
+    border: none;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0;
+    font-size: 16px;
+    transition: background 0.2s ease;
+}
+
+.delete-btn:hover {
+    background: #cc1f1a;
+}
+
+.delete-btn:active {
+    transform: scale(0.95);
+}
+
+.delete-icon {
+    pointer-events: none;
+    line-height: 1;
 }
 
 /* ========== MODALS (RECEIPT, etc.) ========== */
@@ -755,37 +830,198 @@ body.theme-light #loading-overlay .spinner {
 }
 
 /* ========== RESPONSIVE ========== */
-@media (max-width: 900px) {
+/* ========== RESPONSIVE (desktop → laptop → tablet → phone) ========== */
+
+/* Big / normal desktops – just soften spacing a bit */
+@media (max-width: 1400px) {
     .pos-wrapper {
-        flex-direction: column;
+        max-width: 1100px;
+        margin: 12px auto;
+        padding: 10px;
     }
 
     .pos-sidebar {
+        min-width: 180px;
+        max-width: 230px;
+    }
+}
+
+/* Small laptops / large tablets in landscape (≤ 1200px) 
+   👉 Still keep sidebar LEFT and main on the RIGHT */
+@media (max-width: 1200px) {
+    .pos-wrapper {
+        max-width: 100%;
+        margin: 10px auto;
+        padding: 10px;
+    }
+
+    .pos-sidebar {
+        min-width: 170px;
+        max-width: 220px;
+    }
+
+    .pos-main {
+        min-width: 0;
+    }
+
+    .top-info {
+        flex-wrap: wrap;
+    }
+
+    .info-box {
+        flex: 1 1 180px;
+    }
+
+    .totals-area {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .small-totals {
+        flex: 1 1 260px;
+    }
+
+    .big-total {
+        flex: 0 0 220px;
+        text-align: right;
+    }
+}
+
+/* True tablet layout (≤ 992px) 
+   👉 STACK: sidebar on top, main below */
+@media (max-width: 992px) {
+    .pos-wrapper {
+        flex-direction: column;
+        max-width: 100%;
+        margin: 10px auto;
+        padding: 10px;
+    }
+
+    .pos-sidebar {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
         flex-direction: row;
         flex-wrap: wrap;
         justify-content: flex-start;
+        gap: 8px;
+        box-sizing: border-box;
+    }
+
+    .side-btn {
+        flex: 1 1 160px;      /* 2–3 buttons per row on tablets */
+        justify-content: center;
+        font-size: 13px;
+        padding: 7px 10px;
+    }
+
+    .pos-main {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .top-info {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .info-box {
+        flex: 1 1 160px;
+    }
+
+    .table-area {
+        padding: 10px;
+    }
+
+    .totals-area {
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-start;
+    }
+
+    .small-totals,
+    .big-total {
+        flex: 1 1 240px;
+        width: 100%;
+    }
+
+    .big-total {
+        text-align: right;
+    }
+}
+
+/* Phones / small tablets (≤ 768px) – fully stacked */
+@media (max-width: 768px) {
+    .pos-wrapper {
+        flex-direction: column;
+        padding: 8px;
+        margin: 6px;
+        border-radius: 12px;
+    }
+
+    .pos-sidebar {
+        padding: 8px;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .side-btn {
+        flex: 1 1 120px;
+        font-size: 12px;
+        padding: 6px 8px;
+    }
+
+    .top-info {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .info-box {
+        width: 100%;
+        flex: 1 1 auto;
+        min-width: 0;
     }
 
     .totals-area {
         flex-direction: column;
-        align-items: flex-end;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .small-totals,
+    .big-total {
+        width: 100%;
     }
 
     .big-total {
-        width: 100%;
         text-align: right;
     }
-}
-/* ✅ Make header text visible in both themes */
-body.theme-light .pos-table thead th {
-    color: var(--orange-strong) !important; /* dark orange / brown */
+
+    .table-area {
+        margin: 0 -4px;
+        padding: 8px 4px;
+        overflow-x: auto;
+    }
+
+    .pos-table {
+        min-width: 560px;
+        font-size: 12px;
+    }
+
+    .pos-table th,
+    .pos-table td {
+        padding: 8px 6px;
+    }
+
+    body {
+        overflow-x: hidden;
+    }
 }
 
-body.theme-dark .pos-table thead th {
-    color: #111827 !important; 
-}
 
 </style>
+
 
 @php
     use App\Models\Setting;
@@ -1236,55 +1472,57 @@ function formatMoneyJS(amount) {
                 vatableSubtotal += lineTotal;
             }
 
-            itemsBody.innerHTML += `
-    <tr>
-        <td>${i.sku}</td>
-        <td>
-            ${i.name}
-            ${i.stock !== undefined && i.stock < i.qty
-                ? `<span style="color:red; font-size:12px;"> 🔴 OUT OF STOCK</span>`
-                : ``}
-        </td>
+           itemsBody.innerHTML += `
+<tr>
+    <td>${i.sku}</td>
 
-        <!-- Price with currency -->
-        <td>${formatMoneyJS(i.price)}</td>
+    <td>
+        ${i.name}
+        ${i.stock !== undefined && i.stock < i.qty
+            ? `<span class="stock-warning">🔴 OUT OF STOCK</span>`
+            : ``}
+    </td>
 
-        <td>
-            <div class="qty-wrapper">
-                <button type="button"
-                        class="qty-btn"
-                        onclick="changeQty(${i.id}, -1)"
-                        ${i.stock !== undefined && i.stock < 1 ? 'disabled' : ''}>
-                    -
-                </button>
+    <td>${formatMoneyJS(i.price)}</td>
 
-                <input type="number"
-                       min="1"
-                       value="${i.qty}"
-                       onchange="updateQty(${i.id}, this.value)"
-                       ${i.stock !== undefined && i.stock < i.qty
-                            ? 'style="border:1px solid red;"'
-                            : ''}>
-
-                <button type="button"
-                        class="qty-btn"
-                        onclick="changeQty(${i.id}, 1)"
-                        ${(i.stock !== undefined && i.qty >= i.stock) ? 'disabled' : ''}>
-                    +
-                </button>
-            </div>
-        </td>
-
-        <!-- Styled delete button -->
-        <td>
+    <td>
+        <div class="qty-wrapper">
             <button type="button"
-                    class="delete-btn"
-                    onclick="removeItem(${i.id})">
-                🗑
+                class="qty-btn qty-minus"
+                onclick="changeQty(${i.id}, -1)"
+                ${(i.stock !== undefined && i.stock < 1) ? 'disabled' : ''}>
+                -
             </button>
-        </td>
-    </tr>
+
+            <input type="number"
+                class="qty-input"
+                min="1"
+                value="${i.qty}"
+                onchange="updateQty(${i.id}, this.value)"
+                ${i.stock !== undefined && i.stock < i.qty
+                    ? 'style="border:1px solid red;"'
+                    : ''}>
+
+            <button type="button"
+                class="qty-btn qty-plus"
+                onclick="changeQty(${i.id}, 1)"
+                ${(i.stock !== undefined && i.qty >= i.stock) ? 'disabled' : ''}>
+                +
+            </button>
+        </div>
+    </td>
+
+    <td>
+       <button type="button"
+        class="delete-btn"
+        onclick="removeItem(${i.id})">
+    <span class="delete-icon">🗑</span>
+</button>
+
+    </td>
+</tr>
 `;
+
 
         });
 
@@ -1746,84 +1984,91 @@ function formatMoneyJS(amount) {
             const resumeBtn = e.target.closest('.held-resume-btn');
             const deleteBtn = e.target.closest('.held-delete-btn');
 
-            if (resumeBtn) {
-                const id = resumeBtn.dataset.id;
-                if (!id) return;
+           if (resumeBtn) {
+    const id = resumeBtn.dataset.id;
+    if (!id) return;
 
-                const url = resumeHeldUrlTemplate.replace('__ID__', id);
+    const url = resumeHeldUrlTemplate.replace('__ID__', id);
 
-                try {
-                    loadingOverlay.style.display = 'flex';
+    try {
+        loadingOverlay.style.display = 'flex';
 
-                    const res = await fetch(url, {
-                        method: 'GET',
-                        headers: { 'Accept': 'application/json' },
-                    });
+        const res = await fetch(url, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+        });
 
-                    if (!res.ok) {
-                        const text = await res.text();
-                        console.error('[resumeHeld] HTTP error', res.status, text);
-                        showMessage('error', 'Failed to resume held sale');
-                        return;
+        if (!res.ok) {
+            const text = await res.text();
+            console.error('[resumeHeld] HTTP error', res.status, text);
+            showMessage('error', 'Failed to resume held sale');
+            return;
+        }
+
+        const sale = await res.json();
+
+        if (!sale.items || !Array.isArray(sale.items) || sale.items.length === 0) {
+            showMessage('error', 'No items found for this held sale');
+            return;
+        }
+
+        // ✅ Just restore the items – no stock limits here
+        cartItems = [];
+
+        for (let item of sale.items) {
+            const prodId = item.product_id;
+            const sku    = item.sku;
+            const name   = item.name;
+            const price  = Number(item.price);
+            const qty    = Number(item.qty);
+
+            // ✅ Only fetch product to know if it is VATable
+            let isVatable = true; // sensible default
+
+            try {
+                const productRes = await fetch(`/products/json/${prodId}`, {
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (productRes.ok) {
+                    const product = await productRes.json();
+
+                    // robust boolean parsing (can be true/false, 0/1, "0"/"1")
+                    const raw = product?.is_vatable;
+                    if (raw === true || raw === 1 || raw === '1') {
+                        isVatable = true;
+                    } else if (raw === false || raw === 0 || raw === '0') {
+                        isVatable = false;
                     }
-
-                    const sale = await res.json();
-
-                    if (!sale.items || !Array.isArray(sale.items) || sale.items.length === 0) {
-                        showMessage('error', 'No items found for this held sale');
-                        return;
-                    }
-
-                    cartItems = [];
-
-                    for (let item of sale.items) {
-                        const prodId  = item.product_id;
-                        const sku     = item.sku;
-                        const name    = item.name;
-                        const price   = Number(item.price);
-                        const qty     = Number(item.qty);
-
-                        // GET real live product stock
-                        const product = await fetch(`/products/json/${prodId}`)
-                            .then(r => r.json())
-                            .catch(() => null);
-
-                        let stock = product?.quantity ?? 0;
-                        let isVatable = product?.is_vatable ?? true;
-
-                        // Add to cart
-                        cartItems.push({
-                            id: prodId,
-                            sku: sku,
-                            name: name,
-                            price: price,
-                            qty: qty,
-                            stock: stock,
-                            is_vatable: Boolean(isVatable),
-                        });
-
-                        // If held qty > current stock → warn user
-                        if (qty > stock) {
-                            showMessage(
-                                'error',
-                                `⚠ ${name} only has ${stock} left (held sale requested ${qty}).`
-                            );
-                        }
-                    }
-
-                    renderCart();
-                    showMessage('success', 'Held sale resumed into cart');
-                    closeModal('sales-history-modal');
-
-                } catch (err) {
-                    console.error('[resumeHeld] ERROR', err);
-                    showMessage('error', 'Error resuming held sale');
-                } finally {
-                    loadingOverlay.style.display = 'none';
                 }
-
-                return;
+            } catch (err) {
+                console.warn('[resumeHeld] could not load product for VAT, using default', err);
             }
+
+            // ✅ Do NOT set stock here – let other checks handle it
+            cartItems.push({
+                id: prodId,
+                sku: sku,
+                name: name,
+                price: price,
+                qty: qty,
+                is_vatable: isVatable,
+            });
+        }
+
+        renderCart();
+        showMessage('success', 'Held sale resumed into cart');
+        closeModal('sales-history-modal');
+
+    } catch (err) {
+        console.error('[resumeHeld] ERROR', err);
+        showMessage('error', 'Error resuming held sale');
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+
+    return;
+}
 
             if (deleteBtn) {
                 const id = deleteBtn.dataset.id;
@@ -2036,7 +2281,7 @@ if (submitPaymentBtn) {
                         <div>
                             <img src="${STORE_LOGO}" alt="Logo" class="receipt-logo">
                         </div>
-                        <h2>${STORE_NAME}</h2>
+                       
                         <p>${STORE_ADDRESS}</p>
                         <p>${STORE_PHONE}</p>
                         <div class="receipt-line"></div>

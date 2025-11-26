@@ -42,6 +42,7 @@
             <select id="payment-method">
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
+                 <option value="transfer">Transfer</option>
             </select>
         </div>
         <div>

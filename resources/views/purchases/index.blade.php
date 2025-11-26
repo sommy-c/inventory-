@@ -61,34 +61,48 @@
                         <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody>
-                @forelse($purchases as $purchase)
-                    <tr>
-                        <td>{{ $purchase->id }}</td>
-                        <td>{{ $purchase->purchase_date }}</td>
-                        <td>{{ optional($purchase->supplier)->name }}</td>
-                        <td>{{ $purchase->reference ?? '—' }}</td>
+               <tbody>
+@forelse($purchases as $purchase)
+    <tr
+        data-purchase-id="{{ $purchase->id }}"
+        data-total="{{ $purchase->total }}"
+        data-paid="{{ $purchase->amount_paid }}"
+    >
+        <td>{{ $purchase->id }}</td>
+        <td>{{ $purchase->purchase_date }}</td>
+        <td>{{ optional($purchase->supplier)->name }}</td>
+        <td>{{ $purchase->reference ?? '—' }}</td>
 
-                        {{-- Total with currency --}}
-                        <td>{{ $formatCurrency($purchase->total) }}</td>
+        {{-- Total with currency --}}
+        <td class="cell-total">{{ $formatCurrency($purchase->total) }}</td>
 
-                        {{-- Amount paid with currency --}}
-                        <td>{{ $formatCurrency($purchase->amount_paid) }}</td>
+        {{-- Amount paid with currency --}}
+        <td class="cell-paid">{{ $formatCurrency($purchase->amount_paid) }}</td>
 
-                        <td>{{ ucfirst($purchase->payment_status) }}</td>
-                        <td>
-                            <a href="{{ route('admin.purchases.show', $purchase) }}"
-                               class="btn-small btn-view-purchase">
-                                View
-                            </a>
-                        </td>
-                    </tr>
-                @empty
-                    <tr>
-                        <td colspan="8" style="text-align:center;">No purchases found.</td>
-                    </tr>
-                @endforelse
-                </tbody>
+        <td class="cell-status">{{ ucfirst($purchase->payment_status) }}</td>
+        <td>
+            <a href="{{ route('admin.purchases.show', $purchase) }}"
+               class="btn-small btn-view-purchase">
+                View
+            </a>
+
+            {{-- 🔹 New: Add Payment button --}}
+            @if($purchase->total > $purchase->amount_paid)
+                <button type="button"
+                        class="btn-small btn-secondary btn-add-payment"
+                        data-id="{{ $purchase->id }}">
+                    Add Payment
+                </button>
+            @endif
+        </td>
+    </tr>
+@empty
+    <tr>
+        <td colspan="8" style="text-align:center;">No purchases found.</td>
+    </tr>
+@endforelse
+</tbody>
+
             </table>
         </div>
 
@@ -117,20 +131,67 @@
         </div>
     </div>
 </div>
+
+{{-- 🔹 New: Add Payment Modal --}}
+<div class="modal-overlay hidden" id="addPaymentModal">
+    <div class="modal-card" style="max-width: 420px;">
+        <div class="modal-header">
+            <h2 id="addPaymentTitle">Add Payment</h2>
+            <button type="button" class="modal-close" id="addPaymentClose">&times;</button>
+        </div>
+
+        <div class="modal-body">
+            <form id="addPaymentForm">
+                @csrf
+                <input type="hidden" id="addPaymentPurchaseId">
+
+                <div class="form-group">
+                    <label>Purchase Total</label>
+                    <input type="text" id="addPaymentTotal" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label>Already Paid</label>
+                    <input type="text" id="addPaymentAlreadyPaid" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label>Current Balance</label>
+                    <input type="text" id="addPaymentBalance" readonly>
+                </div>
+
+                <div class="form-group">
+                    <label>Additional Payment Amount</label>
+                    <input type="number" step="0.01" min="0.01" id="addPaymentAmount" required>
+                </div>
+
+                <div class="alert alert-error" id="addPaymentError" style="display:none; margin-top:8px;"></div>
+
+                <div class="modal-footer" style="margin-top: 16px; justify-content:flex-end;">
+                    <button type="button" class="btn-secondary" id="addPaymentCancel">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn-primary">
+                        Save Payment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
 @endsection
+
 
 @push('scripts')
 <script>
     // Expose currency config to JS safely
     window.APP_CURRENCY = {
-       symbol: JSON.parse(`@json($currencySymbol)`),
-position: JSON.parse(`@json($currencyPosition)`),
-
+        symbol: JSON.parse(`@json($currencySymbol)`),
+        position: JSON.parse(`@json($currencyPosition)`),
     };
 
-    /**
-     * JS helper: format money using Settings (symbol + position)
-     */
     function formatMoneyJS(amount) {
         const cfg = window.APP_CURRENCY || { symbol: '₦', position: 'left' };
         const symbol   = cfg.symbol || '₦';
@@ -144,6 +205,7 @@ position: JSON.parse(`@json($currencyPosition)`),
     }
 
     document.addEventListener('DOMContentLoaded', function () {
+        // ------- Existing detail modal code (unchanged) -------
         const modal          = document.getElementById('purchaseDetailModal');
         const modalTitle     = document.getElementById('purchaseDetailTitle');
         const modalBody      = document.getElementById('purchaseDetailBody');
@@ -171,7 +233,7 @@ position: JSON.parse(`@json($currencyPosition)`),
 
         document.querySelectorAll('.btn-view-purchase').forEach(function (btn) {
             btn.addEventListener('click', function (e) {
-                e.preventDefault(); // stop full-page navigation
+                e.preventDefault();
                 const url = btn.getAttribute('href');
                 if (!url) return;
 
@@ -188,7 +250,6 @@ position: JSON.parse(`@json($currencyPosition)`),
                 .then(response => response.json())
                 .then(data => {
                     const p = data.purchase;
-
                     let html = '';
 
                     html += '<div class="customer-details-body">';
@@ -226,10 +287,8 @@ position: JSON.parse(`@json($currencyPosition)`),
                     }
 
                     html += '</div>';
-
                     html += '<hr style="margin: 14px 0; border-color: rgba(148, 163, 184, 0.4);">';
 
-                    // Items table
                     html += '<div class="table-wrapper">';
                     html += '  <table>';
                     html += '    <thead>';
@@ -244,8 +303,7 @@ position: JSON.parse(`@json($currencyPosition)`),
                     html += '    <tbody>';
 
                     p.items.forEach(function (item) {
-                        const label = item.product_name +
-                            (item.sku ? ' (' + item.sku + ')' : '');
+                        const label = item.product_name + (item.sku ? ' (' + item.sku + ')' : '');
                         html += '  <tr>';
                         html += '    <td>' + label + '</td>';
                         html += '    <td>' + item.quantity + '</td>';
@@ -259,7 +317,6 @@ position: JSON.parse(`@json($currencyPosition)`),
                     html += '  </table>';
                     html += '</div>';
 
-                    // Totals
                     html += '<div style="margin-top:16px; max-width:320px; margin-left:auto;">';
                     html += '  <table style="width:100%; font-size:13px;">';
                     html += '    <tbody>';
@@ -287,6 +344,154 @@ position: JSON.parse(`@json($currencyPosition)`),
                 });
             });
         });
+
+        // ------- 🔹 Add Payment Modal -------
+
+        const payModal         = document.getElementById('addPaymentModal');
+        const payTitle         = document.getElementById('addPaymentTitle');
+        const payClose         = document.getElementById('addPaymentClose');
+        const payCancel        = document.getElementById('addPaymentCancel');
+        const payForm          = document.getElementById('addPaymentForm');
+        const payPurchaseIdInp = document.getElementById('addPaymentPurchaseId');
+        const payTotalInp      = document.getElementById('addPaymentTotal');
+        const payPaidInp       = document.getElementById('addPaymentAlreadyPaid');
+        const payBalanceInp    = document.getElementById('addPaymentBalance');
+        const payAmountInp     = document.getElementById('addPaymentAmount');
+        const payErrorBox      = document.getElementById('addPaymentError');
+
+        function openPayModal() {
+            if (payModal) payModal.classList.remove('hidden');
+        }
+        function closePayModal() {
+            if (payModal) payModal.classList.add('hidden');
+            if (payErrorBox) {
+                payErrorBox.style.display = 'none';
+                payErrorBox.textContent = '';
+            }
+            if (payForm) payForm.reset();
+        }
+
+        if (payClose)  payClose.addEventListener('click', closePayModal);
+        if (payCancel) payCancel.addEventListener('click', closePayModal);
+
+        if (payModal) {
+            payModal.addEventListener('click', function(e) {
+                if (e.target === payModal) {
+                    closePayModal();
+                }
+            });
+        }
+
+        // When user clicks "Add Payment"
+        document.querySelectorAll('.btn-add-payment').forEach(function(btn) {
+            btn.addEventListener('click', function () {
+                const row = btn.closest('tr');
+                if (!row) return;
+
+                const purchaseId = row.dataset.purchaseId;
+                const total      = parseFloat(row.dataset.total || 0);
+                const paid       = parseFloat(row.dataset.paid || 0);
+                const balance    = total - paid;
+
+                payPurchaseIdInp.value = purchaseId;
+                payTotalInp.value      = formatMoneyJS(total);
+                payPaidInp.value       = formatMoneyJS(paid);
+                payBalanceInp.value    = formatMoneyJS(balance);
+                payAmountInp.value     = balance > 0 ? balance.toFixed(2) : '';
+
+                payTitle.textContent = 'Add Payment for Purchase #' + purchaseId;
+
+                openPayModal();
+            });
+        });
+
+        // Submit payment
+        if (payForm) {
+            payForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                const purchaseId = payPurchaseIdInp.value;
+                const amount     = parseFloat(payAmountInp.value || 0);
+
+                if (!purchaseId || amount <= 0) {
+                    if (payErrorBox) {
+                        payErrorBox.textContent = 'Please enter a valid payment amount.';
+                        payErrorBox.style.display = 'block';
+                    }
+                    return;
+                }
+
+                const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+                const token     = tokenMeta ? tokenMeta.getAttribute('content') : '';
+
+                fetch(`{{ url('/admin/purchases') }}/${purchaseId}/add-payment`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': token,
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                    body: JSON.stringify({ amount: amount })
+                })
+                .then(async (response) => {
+                    if (response.status === 422) {
+                        const data = await response.json();
+                        let msg = 'Validation error.';
+                        if (data.errors && data.errors.amount && data.errors.amount[0]) {
+                            msg = data.errors.amount[0];
+                        }
+                        if (payErrorBox) {
+                            payErrorBox.textContent = msg;
+                            payErrorBox.style.display = 'block';
+                        }
+                        throw new Error('Validation error');
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Failed to add payment');
+                    }
+
+                    return response.json();
+                })
+                .then((data) => {
+                    const p = data.purchase;
+
+                    // Update row on the table
+                    const row = document.querySelector(`tr[data-purchase-id="${p.id}"]`);
+                    if (row) {
+                        row.dataset.paid = p.amount_paid;
+
+                        const cellPaid   = row.querySelector('.cell-paid');
+                        const cellStatus = row.querySelector('.cell-status');
+                        const btnAddPay  = row.querySelector('.btn-add-payment');
+
+                        if (cellPaid) {
+                            cellPaid.textContent = formatMoneyJS(p.amount_paid);
+                        }
+                        if (cellStatus) {
+                            cellStatus.textContent = p.payment_status.charAt(0).toUpperCase() + p.payment_status.slice(1);
+                        }
+
+                        // If fully paid, hide the "Add Payment" button
+                        if (btnAddPay && p.amount_paid >= p.total) {
+                            btnAddPay.remove();
+                        }
+                    }
+
+                    closePayModal();
+                })
+                .catch((err) => {
+                    console.error(err);
+                    if (payErrorBox) {
+                        payErrorBox.textContent = 'Failed to save payment.';
+                        payErrorBox.style.display = 'block';
+                    }
+                });
+            });
+        }
     });
 </script>
 @endpush
+
+

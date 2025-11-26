@@ -67,14 +67,13 @@
             {{-- Payment method --}}
             <div class="col-md-3">
                 <label for="payment_method" class="form-label">Payment Method</label>
-                <select id="payment_method" name="payment_method" class="form-control">
-                    <option value="">All Methods</option>
-                    <option value="cash"          {{ ($paymentMethod ?? '') === 'cash' ? 'selected' : '' }}>Cash</option>
-                    <option value="card"          {{ ($paymentMethod ?? '') === 'card' ? 'selected' : '' }}>Card</option>
-                    <option value="bank_transfer" {{ ($paymentMethod ?? '') === 'bank_transfer' ? 'selected' : '' }}>Bank Transfer</option>
-                    <option value="pos"           {{ ($paymentMethod ?? '') === 'pos' ? 'selected' : '' }}>POS</option>
-                    {{-- adjust / add more to match your DB values --}}
-                </select>
+                <select name="payment_method" class="form-control">
+    <option value="">All</option>
+    <option value="cash" {{ $paymentMethod === 'cash' ? 'selected' : '' }}>Cash</option>
+    <option value="card" {{ $paymentMethod === 'card' ? 'selected' : '' }}>Card</option>
+    <option value="transfer" {{ $paymentMethod === 'transfer' ? 'selected' : '' }}>Transfer</option>
+</select>
+
             </div>
 
             {{-- Buttons --}}
@@ -102,7 +101,8 @@
 
 
         {{-- Summary Cards (dark glass cards similar to form-card) --}}
-        <div class="row mb-4">
+        <div class="row mb-4 sales-summary-row">
+
             <div class="col-md-3 mb-3">
                 <div class="card" style="background: rgba(255,255,255,0.08); backdrop-filter: blur(8px); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
                     <div class="card-body">
@@ -128,77 +128,102 @@
                                 Number of Sales
                             @endif
                         </h6>
-                        <h3 class="mb-0" style="color:#fff;">{{ $countSales }}</h3>
+                       <h3 class="mb-0" style="color:#fff;">
+    {{ $countSales }}
+</h3>
+
                     </div>
                 </div>
             </div>
+
+                <div class="col-md-3 mb-3">
+        <div class="card" style="background: rgba(255,255,255,0.08); backdrop-filter: blur(8px); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <div class="card-body">
+                <h6 class="card-title" style="font-size: 14px; color:#d1d5db;">
+                    @if($cashier)
+                        Total Profit ({{ $cashier }})
+                    @else
+                        Total Profit (Filtered)
+                    @endif
+                </h6>
+                <h3 class="mb-0" style="color:#fff;">
+                    {{ $currencySymbol }}{{ number_format($totalProfit ?? 0, 2) }}
+                </h3>
+            </div>
+        </div>
+    </div>
+
         </div>
 
         {{-- Sales Table --}}
         <div class="card glass-card">
             <div class="table-responsive" id="sales-table-wrapper">
-                <table class="glass-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Date & Time</th>
-                            <th>Sale ID</th>
+               <table class="glass-table">
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Date & Time</th>
+            <th>Sale ID</th>
 
-                            @if(empty($cashier))
-                                <th>Cashier</th>
-                            @endif
+            @if(empty($cashier))
+                <th>Cashier</th>
+            @endif
 
-                            <th>Customer</th>
-                            <th>Items</th>
-                            <th>Total</th>
-                            <th>Payment</th>
-                            <th>Status</th>
-                            <th>Receipt</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($sales as $index => $sale)
-                            <tr class="sale-row"
-                                data-sale-id="{{ $sale->id }}"
-                                data-details-url="{{ route('admin.sales.details', $sale->id) }}"
-                                style="cursor: pointer;">
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Total</th>
+            <th>Payment</th>
+            <th>Profit</th>
+            <th>Receipt</th>
+        </tr>
+    </thead>
+    <tbody>
+        @forelse ($sales as $index => $sale)
+            <tr class="sale-row"
+                data-sale-id="{{ $sale->id }}"
+                data-details-url="{{ route('admin.sales.details', $sale->id) }}"
+                style="cursor: pointer;">
 
-                                <td>{{ $sales->firstItem() + $index }}</td>
-                                <td>{{ $sale->created_at->format('Y-m-d H:i') }}</td>
-                                <td>{{ $sale->id }}</td>
+                <td>{{ $sales->firstItem() + $index }}</td>
+                <td>{{ $sale->created_at->format('Y-m-d H:i') }}</td>
+                <td>{{ $sale->id }}</td>
 
-                                @if(empty($cashier))
-                                    <td>{{ optional($sale->user)->name ?? 'N/A' }}</td>
-                                @endif
+                @if(empty($cashier))
+                    <td>{{ optional($sale->user)->name ?? 'N/A' }}</td>
+                @endif
 
-                                <td>{{ $sale->customer_name ?? '-' }}</td>
-                                <td>{{ $sale->items->sum('qty') }}</td>
-                                <td><strong>{{ $currencySymbol }}{{ number_format($sale->total, 2) }}</strong></td>
+                <td>{{ $sale->customer_name ?? '-' }}</td>
+                <td>{{ $sale->items->sum('qty') }}</td>
 
-                                <td>{{ ucfirst($sale->payment_method) }}</td>
-                                <td>
-                                    <span class="badge 
-                                        @if($sale->status === 'completed') bg-success
-                                        @elseif($sale->status === 'paused') bg-warning
-                                        @else bg-secondary @endif">
-                                        {{ ucfirst($sale->status) }}
-                                    </span>
-                                </td>
-                                <td>
-                                    <button type="button"
-                                        class="btn btn-sm btn-outline-primary btn-print-receipt"
-                                        data-sale-id="{{ $sale->id }}">
-                                        Print
-                                    </button>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="10" class="text-center">No sales found for this filter.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
+                {{-- ✅ Correct TOTAL column --}}
+                <td>
+                    <strong>{{ $currencySymbol }}{{ number_format($sale->total, 2) }}</strong>
+                </td>
+
+                <td>{{ ucfirst($sale->payment_method) }}</td>
+
+                {{-- ✅ PROFIT column --}}
+                <td>
+                    <strong>
+                        {{ $currencySymbol }}{{ number_format($sale->profit ?? 0, 2) }}
+                    </strong>
+                </td>
+
+                <td>
+                    <button type="button"
+                        class="btn btn-sm btn-outline-primary btn-print-receipt"
+                        data-sale-id="{{ $sale->id }}">
+                        Print
+                    </button>
+                </td>
+            </tr>
+        @empty
+            <tr>
+                <td colspan="10" class="text-center">No sales found for this filter.</td>
+            </tr>
+        @endforelse
+    </tbody>
+</table>
 
                <div class="pagination-wrapper mt-3">
     {{ $sales->links() }}
@@ -496,6 +521,119 @@ body.theme-light #btn-print-sales-table:hover {
     transform: translateY(-1px);
     box-shadow: 0 6px 18px rgba(234,88,12,0.25);
 }
+/* ========== SALES PAGE RESPONSIVE LAYOUT ========== */
+
+/* General page container: keep it centered but flexible */
+.sales-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 10px 24px;
+}
+
+/* Make the filters card breathe & not feel cramped */
+.sales-filters-card .card-body {
+    padding: 12px 12px 16px;
+}
+
+/* Add spacing between filter fields even if Bootstrap grid misbehaves */
+.sales-filters-card .card-body form.row {
+    row-gap: 10px;
+}
+
+/* Summary row behaves like widgets area */
+.sales-summary-row .card {
+    height: 100%;
+}
+
+/* Table wrapper: allow horizontal scroll, avoid whole-page scrolling */
+#sales-table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ========== TABLE RESPONSIVE ========== */
+#sales-table-wrapper .glass-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+/* ---- medium screens (tablets / small laptops) ---- */
+@media (max-width: 992px) {
+    .sales-page {
+        padding: 10px 8px 20px;
+    }
+
+    /* Make each filter item at least half-width */
+    .sales-filters-card .row > [class*="col-md-3"] {
+        flex: 0 0 50%;
+        max-width: 50%;
+    }
+
+    .sales-summary-row > [class*="col-md"] {
+        flex: 0 0 50%;
+        max-width: 50%;
+        margin-bottom: 10px;
+    }
+}
+
+/* ---- small screens (phones) ---- */
+@media (max-width: 640px) {
+    .sales-page {
+        padding: 8px 6px 18px;
+    }
+
+    /* Filters: stack vertically */
+    .sales-filters-card .row > [class*="col-"],
+    .sales-filters-card .row > [class*="col-md"] {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    .sales-filters-card .card-body {
+        padding: 10px;
+    }
+
+    /* Put Filter + Reset buttons on separate lines */
+    .sales-filters-card .col-md-3.d-flex {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+
+    .sales-filters-card .col-md-3.d-flex .btn {
+        flex: 1 1 48%;
+    }
+
+    /* Summary “widgets”: each card full width */
+    .sales-summary-row > [class*="col-"],
+    .sales-summary-row > [class*="col-md"] {
+        flex: 0 0 100%;
+        max-width: 100%;
+        margin-bottom: 10px;
+    }
+
+    .sales-summary-row .card {
+        width: 100%;
+    }
+
+    /* Table: keep only the wrapper scrollable, not the whole page */
+    #sales-table-wrapper {
+        margin-top: 8px;
+        padding-bottom: 4px;
+    }
+
+    #sales-table-wrapper .glass-table th,
+    #sales-table-wrapper .glass-table td {
+        padding: 6px 6px;
+        font-size: 0.8rem;
+        white-space: nowrap; /* stops labels from wrapping like crazy */
+    }
+
+    body {
+        overflow-x: hidden; /* no sideways drag for whole page */
+    }
+}
+
 
 </style>
 

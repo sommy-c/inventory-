@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DamageReport;
 use App\Models\Product;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -223,17 +224,132 @@ public function reject(DamageReport $damage)
 
     // ---- Export stubs (you can hook Excel/PDF libs here) ----
 
-    public function exportExcel(Request $request)
-    {
-        // TODO: Implement with maatwebsite/excel if you install it.
-        // For now, just redirect back with message:
-        return back()->with('success', 'Excel export not implemented yet.');
+   public function exportExcel(Request $request)
+{
+    // Get all filtered damages (no pagination)
+    $damages = $this->buildDamageQuery($request)->get();
+
+    if ($damages->isEmpty()) {
+        return back()->with('error', 'No damage records found for this filter to export.');
     }
 
+    $fileName = 'damage-report-' . now()->format('Ymd_His') . '.csv';
+
+    $headers = [
+        'Content-Type'        => 'text/csv',
+        'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+    ];
+
+    $columns = [
+        'Date & Time',
+        'ID',
+        'Product',
+        'Type',
+        'Quantity',
+        'Remaining',
+        'Supplier',
+        'Status',
+        'Reported By',
+        'Note',
+    ];
+
+    $callback = function () use ($damages, $columns) {
+        $handle = fopen('php://output', 'w');
+
+        // header row
+        fputcsv($handle, $columns);
+
+        foreach ($damages as $damage) {
+            fputcsv($handle, [
+                $damage->created_at ? $damage->created_at->format('Y-m-d H:i') : '',
+                $damage->id,
+                optional($damage->product)->name ?? 'N/A',
+                ucfirst($damage->type),
+                $damage->quantity,
+                $damage->remaining,
+                optional($damage->product)->supplier ?? '-',
+                ucfirst($damage->status),
+                optional($damage->user)->name ?? 'N/A',
+                $damage->note ?? '',
+            ]);
+        }
+
+        fclose($handle);
+    };
+
+    return response()->stream($callback, 200, $headers);
+}
+
+
     public function exportPdf(Request $request)
-    {
-        // TODO: Implement with dompdf / snappy.
-        return back()->with('success', 'PDF export not implemented yet.');
+{
+    $damages = $this->buildDamageQuery($request)->get();
+
+    if ($damages->isEmpty()) {
+        return back()->with('error', 'No damage records found for this filter to export.');
     }
+
+    $from      = $request->query('from');
+    $to        = $request->query('to');
+    $type      = $request->query('type');
+    $supplier  = $request->query('supplier');
+    $productId = $request->query('product_id');
+
+    $productName = null;
+    if ($productId) {
+        $product = Product::find($productId);
+        $productName = $product ? $product->name : null;
+    }
+
+    $pdf = Pdf::loadView('damages.export-pdf', [
+        'damages'      => $damages,
+        'from'         => $from,
+        'to'           => $to,
+        'type'         => $type,
+        'supplier'     => $supplier,
+        'productName'  => $productName,
+        'isFiltered'   => (bool) ($from || $to || $type || $supplier || $productId),
+    ])->setPaper('A4', 'portrait');
+
+    $fileName = 'damage-report-' . now()->format('Ymd_His') . '.pdf';
+
+    return $pdf->download($fileName);
+}
+
+    protected function buildDamageQuery(Request $request)
+{
+    $type      = $request->query('type');       // damaged | expired
+    $productId = $request->query('product_id');
+    $supplier  = $request->query('supplier');
+    $from      = $request->query('from');
+    $to        = $request->query('to');
+
+    $query = DamageReport::with(['product', 'user'])
+        ->orderByDesc('created_at');
+
+    if ($type) {
+        $query->where('type', $type);
+    }
+
+    if ($productId) {
+        $query->where('product_id', $productId);
+    }
+
+    if ($supplier) {
+        $query->whereHas('product', function ($q) use ($supplier) {
+            $q->where('supplier', 'like', "%{$supplier}%");
+        });
+    }
+
+    if ($from) {
+        $query->whereDate('created_at', '>=', $from);
+    }
+    if ($to) {
+        $query->whereDate('created_at', '<=', $to);
+    }
+
+    return $query;
+}
+
 
 }
